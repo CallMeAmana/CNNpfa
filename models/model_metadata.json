@@ -1,0 +1,6 @@
+{
+    "classes": ["NOT_OK", "OK"],
+    "img_size": 128,
+    "test_acc": 0.9981,
+    "n_epochs": 20
+}
