@@ -1,0 +1,471 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap');
+
+:root {
+  --bg:   #07101f;
+  --bg-p: #0b1829;
+  --bg-c: #0d1e33;
+  --bg-i: #071525;
+  --teal: #00e5c8;
+  --t10:  rgba(0,229,200,0.08);
+  --t20:  rgba(0,229,200,0.15);
+  --tbd:  rgba(0,229,200,0.22);
+  --red:  #ff003c;
+  --r10:  rgba(255,0,60,0.07);
+  --rbd:  rgba(255,0,60,0.28);
+  --hi:   #d8e8f5;
+  --mid:  #5a7a96;
+  --lo:   rgba(70,110,150,0.4);
+  --bdr:  rgba(255,255,255,0.055);
+  --mono: 'JetBrains Mono', monospace;
+  --hero: 'Syne', sans-serif;
+}
+
+*,*::before,*::after { box-sizing: border-box; }
+
+/* ── WIPE ALL WHITE ── */
+html, body, .stApp,
+[data-testid="stApp"],
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+.main, .block-container, section.main > div {
+  background: var(--bg) !important;
+  font-family: var(--mono) !important;
+  color: var(--hi) !important;
+}
+
+/* Kill ALL default Streamlit padding/margin */
+[data-testid="stMainBlockContainer"] {
+  padding: 0 !important;
+  max-width: 100% !important;
+}
+
+[data-testid="stMain"] > div {
+  padding: 0 !important;
+}
+
+/* Remove the extra gap Streamlit adds above first element */
+[data-testid="stMainBlockContainer"] > div:first-child {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Kill vertical rhythm gaps between blocks */
+[data-testid="stVerticalBlock"] {
+  gap: 0 !important;
+}
+
+[data-testid="stVerticalBlock"] > * {
+  margin-bottom: 0 !important;
+}
+
+/* Hide chrome */
+#MainMenu, footer, [data-testid="stToolbar"],
+[data-testid="stDecoration"], [data-testid="stStatusWidget"],
+header[data-testid="stHeader"] { display: none !important; }
+
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--tbd); border-radius: 2px; }
+
+/* ── HEADER ── */
+.wq-header {
+  background: linear-gradient(90deg, var(--bg-p) 0%, #0c1e38 50%, var(--bg-p) 100%);
+  border-bottom: 1px solid var(--tbd);
+  border-top: 2px solid var(--teal);
+  padding: 9px 20px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.wq-title {
+  font-family: var(--hero);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--hi);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.wq-title em { color: var(--teal); font-style: normal; }
+.wq-subtitle {
+  font-family: var(--mono);
+  font-size: 0.44rem;
+  color: rgba(0,229,200,0.33);
+  letter-spacing: 0.16em;
+  margin-top: 3px;
+}
+.wq-badge {
+  font-family: var(--mono);
+  font-size: 0.44rem;
+  color: var(--lo);
+  letter-spacing: 0.09em;
+  text-align: right;
+  line-height: 1.85;
+}
+
+/* ── STATUS BAR ── */
+.wq-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-p);
+  border-bottom: 1px solid var(--bdr);
+  padding: 4px 20px;
+  /* NO margin-bottom — layout wrapper handles spacing */
+}
+.wq-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 4px var(--teal);
+  animation: blink 2s infinite; flex-shrink: 0;
+}
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.2;} }
+.wq-st {
+  font-family: var(--mono);
+  font-size: 0.46rem;
+  color: var(--teal);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.wq-sep { color: var(--bdr); font-size: 0.7rem; }
+
+/* ── MAIN LAYOUT WRAPPER ── */
+.wq-body {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 14px;
+  padding: 12px 20px 14px;
+  align-items: start;
+}
+
+/* ── LEFT COLUMN ── */
+.wq-left { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── SECTION LABEL ── */
+.wq-label {
+  font-family: var(--mono);
+  font-size: 0.44rem;
+  letter-spacing: 0.22em;
+  color: var(--teal);
+  border-left: 2px solid var(--teal);
+  padding: 0 0 0 6px;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+/* ── SCAN CHIPS ── */
+.wq-chips { display: flex; gap: 5px; margin-bottom: 5px; }
+.wq-scan-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--bg-p); border: 1px solid var(--tbd);
+  border-radius: 3px; padding: 2px 7px;
+  font-family: var(--mono); font-size: 0.44rem; font-weight: 700;
+  color: var(--teal); letter-spacing: 0.12em; text-transform: uppercase;
+}
+.wq-fps-chip {
+  display: inline-flex; align-items: center;
+  background: var(--bg-p); border: 1px solid var(--bdr);
+  border-radius: 3px; padding: 2px 7px;
+  font-family: var(--mono); font-size: 0.44rem;
+  color: var(--mid); letter-spacing: 0.1em;
+}
+
+/* ── WAIT STATE ── */
+.wq-wait {
+  text-align: center; padding: 36px 14px;
+  border: 1px dashed rgba(255,255,255,0.06);
+  border-radius: 7px; background: var(--bg-c);
+}
+.wq-wait-icon { font-size: 1.6rem; opacity: 0.09; display: block; margin-bottom: 10px; }
+.wq-wait-txt {
+  font-family: var(--mono); font-size: 0.55rem;
+  color: rgba(0,229,200,0.22); letter-spacing: 0.22em; text-transform: uppercase;
+}
+.wq-wait-sub {
+  font-family: var(--mono); font-size: 0.44rem;
+  color: var(--lo); margin-top: 5px; letter-spacing: 0.08em;
+}
+
+/* ── RIGHT COLUMN ── */
+.wq-right { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── RESULTS HEADER ── */
+.wq-results-title {
+  font-family: var(--hero); font-size: 1rem; font-weight: 800;
+  color: var(--hi); letter-spacing: 0.01em; margin-bottom: 1px;
+}
+.wq-results-sub {
+  font-family: var(--mono); font-size: 0.48rem;
+  color: var(--mid); letter-spacing: 0.04em; margin-bottom: 8px;
+}
+
+/* ── VERDICT OK ── */
+.wq-verdict-ok {
+  background: linear-gradient(90deg, rgba(0,22,15,0.9), rgba(0,35,22,0.7));
+  border: 1px solid var(--tbd); border-left: 3px solid var(--teal);
+  border-radius: 5px; padding: 8px 14px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+/* ── VERDICT NOK ── */
+.wq-verdict-nok {
+  background: linear-gradient(90deg, rgba(22,0,7,0.95), rgba(34,0,11,0.8));
+  border: 1px solid var(--rbd); border-left: 3px solid var(--red);
+  border-radius: 5px; padding: 8px 14px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.wq-vt-ok {
+  font-family: var(--hero); font-size: 0.9rem; font-weight: 800;
+  color: var(--teal); letter-spacing: 0.12em; text-transform: uppercase;
+}
+.wq-vt-nok {
+  font-family: var(--hero); font-size: 0.9rem; font-weight: 800;
+  color: var(--red); letter-spacing: 0.12em; text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(255,0,60,0.3);
+}
+.wq-vs {
+  font-family: var(--mono); font-size: 0.46rem;
+  color: var(--mid); letter-spacing: 0.07em; margin-top: 2px;
+}
+.wq-vtime {
+  font-family: var(--mono); font-size: 0.44rem;
+  letter-spacing: 0.07em; text-align: right; line-height: 1.7;
+}
+
+/* ── ANNOTATED + POINTS GRID ── */
+.wq-analysis-grid {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 10px;
+  align-items: start;
+}
+
+/* ── POINT CARDS ── */
+.wq-point {
+  display: flex; align-items: center;
+  padding: 6px 9px; border-radius: 4px; margin-bottom: 3px;
+  background: var(--bg-c); border: 1px solid var(--bdr);
+  border-left: 2px solid rgba(0,229,200,0.18);
+  transition: border-color 0.15s;
+}
+.wq-point:hover { border-color: var(--tbd); }
+.wq-point-nok {
+  background: rgba(16,0,6,0.9);
+  border: 1px solid var(--rbd); border-left: 2px solid var(--red);
+}
+.wq-pname {
+  font-family: var(--mono); font-size: 0.57rem; font-weight: 600;
+  color: var(--hi); flex: 1; letter-spacing: 0.02em;
+}
+.wq-pscore {
+  font-family: var(--mono); font-size: 0.54rem; font-weight: 700; color: var(--mid);
+}
+.wq-pok-txt {
+  font-family: var(--mono); font-size: 0.48rem; font-weight: 700; color: var(--teal);
+  background: var(--t10); border: 1px solid var(--tbd);
+  border-radius: 3px; padding: 1px 4px; letter-spacing: 0.05em;
+}
+.wq-pnok-txt {
+  font-family: var(--mono); font-size: 0.48rem; font-weight: 700; color: var(--red);
+  background: var(--r10); border: 1px solid var(--rbd);
+  border-radius: 3px; padding: 1px 4px; letter-spacing: 0.05em;
+}
+.wq-bar-bg {
+  background: var(--bg-i); border-radius: 2px; height: 2px; margin-top: 3px; overflow: hidden;
+}
+
+/* ── METRICS ── */
+.wq-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 8px; }
+.wq-metric {
+  background: var(--bg-c); border: 1px solid var(--bdr);
+  border-radius: 5px; padding: 8px 10px 6px; text-align: center;
+  position: relative; overflow: hidden;
+}
+.wq-metric::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 1px; background: var(--teal); opacity: 0.25;
+}
+.wq-mval {
+  font-family: var(--hero); font-size: 1.3rem; font-weight: 800;
+  color: var(--teal); line-height: 1;
+}
+.wq-mval-nok { color: var(--red); text-shadow: 0 0 10px rgba(255,0,60,0.25); }
+.wq-mlbl {
+  font-family: var(--mono); font-size: 0.4rem; color: var(--lo);
+  letter-spacing: 0.16em; text-transform: uppercase; margin-top: 3px;
+}
+
+/* ── MINI CHART ── */
+.wq-chart-wrap {
+  margin-top: 5px; background: var(--bg-c); border: 1px solid var(--bdr);
+  border-radius: 5px; padding: 6px 8px;
+}
+.wq-chart-lbl {
+  font-family: var(--mono); font-size: 0.38rem; color: var(--lo);
+  letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 4px;
+}
+.wq-mini-bar-row {
+  display: flex; align-items: flex-end; gap: 2px; height: 22px;
+}
+.wq-mini-bar {
+  flex: 1; border-radius: 1px 1px 0 0;
+  background: var(--bg-p); border-top: 1px solid var(--bdr); min-height: 2px;
+}
+.wq-mini-bar.active { background: var(--teal); opacity: 0.38; border-top: none; }
+.wq-mini-bar.nok    { background: var(--red);  opacity: 0.52; border-top: none; }
+
+/* ── VERDICT CHIP (under annotated image) ── */
+.wq-chip-ok {
+  display: flex; justify-content: center; margin-top: 5px;
+}
+.wq-chip-ok > div {
+  background: rgba(0,229,200,0.06); border: 1px solid rgba(0,229,200,0.22);
+  border-radius: 4px; padding: 4px 14px; font-family: var(--mono);
+  font-size: 0.48rem; font-weight: 700; color: var(--teal);
+  letter-spacing: 0.16em; text-transform: uppercase;
+}
+.wq-chip-nok { display: flex; justify-content: center; margin-top: 5px; }
+.wq-chip-nok > div {
+  background: rgba(255,0,60,0.06); border: 1px solid rgba(255,0,60,0.28);
+  border-radius: 4px; padding: 4px 14px; font-family: var(--mono);
+  font-size: 0.48rem; font-weight: 700; color: var(--red);
+  letter-spacing: 0.16em; text-transform: uppercase;
+}
+
+/* ── FOOTER ── */
+.wq-footer {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 0.4rem; color: var(--lo);
+  letter-spacing: 0.1em; padding: 5px 20px 6px;
+  border-top: 1px solid var(--bdr); text-transform: uppercase;
+}
+
+/* ── RIGHT RESULTS PLACEHOLDER ── */
+.wq-placeholder {
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 7px;
+  border: 1px dashed rgba(255,255,255,0.055); border-radius: 8px;
+  background: var(--bg-c); min-height: 320px;
+  font-family: var(--mono); font-size: 0.48rem;
+  color: rgba(70,110,150,0.3); letter-spacing: 0.16em; text-transform: uppercase;
+}
+
+/* ══ STREAMLIT ELEMENT OVERRIDES ══ */
+
+/* Nuke Streamlit's own padding on element containers */
+[data-testid="stElementContainer"],
+[data-testid="stMarkdownContainer"],
+div[data-stale] {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* File uploader */
+[data-testid="stFileUploaderDropzone"] {
+  background: var(--bg-c) !important;
+  border: 1px dashed var(--tbd) !important;
+  border-radius: 6px !important;
+  padding: 10px 12px !important;
+  transition: all 0.18s !important;
+}
+[data-testid="stFileUploaderDropzone"]:hover {
+  border-color: rgba(0,229,200,0.42) !important;
+  background: var(--t10) !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] {
+  font-family: var(--mono) !important;
+  font-size: 0.55rem !important;
+  color: var(--mid) !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] span {
+  font-size: 0.65rem !important;
+  font-weight: 700 !important;
+  color: var(--hi) !important;
+  font-family: var(--hero) !important;
+  display: block !important;
+  margin-bottom: 1px !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] small {
+  font-size: 0.42rem !important;
+  color: var(--lo) !important;
+}
+[data-testid="stFileUploaderDropzone"] button {
+  background: var(--t10) !important;
+  border: 1px solid var(--tbd) !important;
+  border-radius: 3px !important;
+  color: var(--teal) !important;
+  font-family: var(--mono) !important;
+  font-size: 0.48rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+  padding: 4px 10px !important;
+  margin-top: 5px !important;
+}
+[data-testid="stFileUploaderDropzone"] button:hover {
+  background: var(--t20) !important;
+}
+[data-testid="stFileUploaderFile"] {
+  background: var(--bg-c) !important;
+  border: 1px solid var(--tbd) !important;
+  border-radius: 4px !important;
+  padding: 4px 7px !important;
+  margin-top: 4px !important;
+}
+[data-testid="stFileUploaderFileName"] {
+  color: var(--hi) !important;
+  font-family: var(--mono) !important;
+  font-size: 0.55rem !important;
+}
+
+/* Images */
+[data-testid="stImage"] {
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  border: 1px solid var(--bdr) !important;
+}
+[data-testid="stImage"]:hover { border-color: var(--tbd) !important; }
+
+/* pyplot figure */
+[data-testid="stPyplotContainer"] {
+  border-radius: 6px !important;
+  border: 1px solid var(--bdr) !important;
+  background: #060d16 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* All text fallback */
+p, .stMarkdown p {
+  font-family: var(--mono) !important;
+  font-size: 0.58rem !important;
+  color: var(--mid) !important;
+  line-height: 1.5 !important;
+  margin: 0 !important;
+}
+
+hr {
+  border: none !important;
+  margin: 0 !important;
+}
+
+/* Columns */
+[data-testid="stHorizontalBlock"] {
+  gap: 10px !important;
+  align-items: start !important;
+}
+[data-testid="column"] { padding: 0 !important; }
+
+/* Spinner */
+[data-testid="stSpinner"] > div {
+  border-color: var(--tbd) !important;
+  border-top-color: var(--teal) !important;
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+  background: var(--bg-p) !important;
+  border-right: 1px solid var(--bdr) !important;
+}

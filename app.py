@@ -574,25 +574,7 @@ if uploaded_files and techniques_actives:
 
         
 
-        # Tableau caractéristiques
-        st.subheader("Caractéristiques détaillées — 8 premières images")
-        rows_c = []
-        for nom, img_aug, label in resultats[:8]:
-            h, w = img_aug.shape[:2]
-            c_nb = img_aug.shape[2] if len(img_aug.shape) == 3 else 1
-            rows_c.append({
-                "Fichier": nom[:50],
-                "Type couleur": "RGB" if c_nb == 3 else "Gris",
-                "Dimensions": f"{w}×{h}",
-                "Canaux": c_nb,
-                "Moy. R": round(float(img_aug[:,:,0].mean()), 1) if c_nb == 3 else "-",
-                "Moy. G": round(float(img_aug[:,:,1].mean()), 1) if c_nb == 3 else "-",
-                "Moy. B": round(float(img_aug[:,:,2].mean()), 1) if c_nb == 3 else "-",
-                "Techniques appliquées": label[:60],
-            })
-        st.dataframe(pd.DataFrame(rows_c), use_container_width=True)
 
-        st.divider()
 
         # Téléchargement
         st.subheader("Télécharger le dataset augmenté")

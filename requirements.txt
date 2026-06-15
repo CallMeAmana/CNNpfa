@@ -1,0 +1,7 @@
+streamlit
+albumentations
+opencv-python-headless
+numpy
+pillow
+matplotlib
+pandas
