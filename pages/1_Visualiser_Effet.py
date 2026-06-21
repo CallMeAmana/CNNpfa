@@ -4,15 +4,23 @@ import cv2
 import numpy as np
 from PIL import Image
 import io
-from utils import inject_sidebar_toggle
 
 st.set_page_config(
     page_title="Visualiser Effets — Câblage industriel",
     page_icon="👁",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-inject_sidebar_toggle()
+
+def load_css(file_name):
+    with open(file_name, encoding="utf-8") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+try:
+    load_css("style.css")
+except FileNotFoundError:
+    pass
 
 # ── CSS personnalisé ──────────────────────────────────────────────────────────
 st.markdown("""
@@ -181,15 +189,30 @@ def appliquer_effets(img: np.ndarray, actifs: set, params: dict) -> np.ndarray:
     return out
 
 
-# ════════════════════════════════════════════════════════════════════════════════
-# LAYOUT PRINCIPAL : sidebar gauche | panneau droit
-# ════════════════════════════════════════════════════════════════════════════════
-col_side, col_main = st.columns([1, 2.4], gap="large")
+st.sidebar.markdown("""
+<div style="padding:1rem 0.5rem 0.75rem;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.4rem;">
+        <div style="width:28px;height:28px;background:rgba(0,229,200,0.1);
+            border:1px solid rgba(0,229,200,0.3);border-radius:6px;
+            display:flex;align-items:center;justify-content:center;font-size:0.85rem;">
+            &#9707;
+        </div>
+        <span style="font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700;
+            color:#ffffff;letter-spacing:0.05em;text-transform:uppercase;">
+            Visualiser les effets
+        </span>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;
+        color:rgba(0,229,200,0.5);letter-spacing:0.15em;padding-left:36px;">
+        Prévisualisation interactive — original vs augmenté
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-# ── Colonne gauche : upload + sélection des techniques ───────────────────────
-with col_side:
+params = {}
+actifs_nouveau = set()
 
-    # Upload
+with st.sidebar:
     uploaded = st.file_uploader(
         "Glissez votre image ici",
         type=["jpg", "jpeg", "png"],
@@ -202,16 +225,12 @@ with col_side:
         img_orig = cv2.resize(img_orig, (512, 512))
         st.session_state["img_orig"] = img_orig
         st.markdown(
-            f"<div style='font-size:0.72rem;color:#888;margin-bottom:0.5rem;'>"
-            f"1 image importée — 512×512px</div>",
+            "<div style='font-size:0.72rem;color:#888;margin-bottom:0.5rem;'>"
+            "1 image importée — 512×512px</div>",
             unsafe_allow_html=True
         )
 
     st.markdown("<div style='margin-top:0.5rem;'></div>", unsafe_allow_html=True)
-
-    # Techniques avec toggles
-    params = {}
-    actifs_nouveau = set()
 
     for famille, techniques in TECHNIQUES.items():
         st.markdown(f"""
@@ -229,44 +248,26 @@ with col_side:
         for tech in techniques:
             tid = tech["id"]
             is_on = tid in st.session_state.actifs
-
-            c_tog, c_icon, c_info = st.columns([0.5, 0.4, 2.2])
-            with c_tog:
-                tog = st.checkbox("", value=is_on, key=f"tog_{tid}", label_visibility="collapsed")
-            with c_icon:
-                st.markdown(
-                    f"<div style='width:26px;height:26px;border-radius:6px;"
-                    f"background:{'#E1F5EE' if tog else 'transparent'};"
-                    f"border:0.5px solid {'#9FE1CB' if tog else 'rgba(0,0,0,0.1)'};"
-                    f"display:flex;align-items:center;justify-content:center;"
-                    f"font-size:13px;margin-top:2px;'>{tech['icon']}</div>",
-                    unsafe_allow_html=True
-                )
-            with c_info:
-                st.markdown(
-                    f"<div style='padding-top:2px;'>"
-                    f"<div style='font-size:13px;font-weight:500;"
-                    f"'>{tech['nom']}</div>"
-                    f"<div style='font-size:11px;color:#888;margin-top:1px;'>"
-                    f"{tech['desc']}</div></div>",
-                    unsafe_allow_html=True
-                )
-
+            tog = st.checkbox(
+                f"{tech['icon']} {tech['nom']}",
+                value=is_on,
+                key=f"tog_{tid}",
+                label_visibility="visible"
+            )
             if tog:
                 actifs_nouveau.add(tid)
+                st.caption(tech["desc"])
 
-    st.session_state.actifs = actifs_nouveau
-
-    # Bouton reset
     if st.session_state.actifs:
-        st.markdown("<div style='margin-top:0.5rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top:0.75rem;'></div>", unsafe_allow_html=True)
         if st.button("Réinitialiser tous les effets", use_container_width=True):
             st.session_state.actifs = set()
             st.rerun()
 
+st.session_state.actifs = actifs_nouveau
 
-# ── Colonne droite : aperçu + paramètres ─────────────────────────────────────
-with col_main:
+# ── Zone principale : aperçu + paramètres ─────────────────────────────────────
+with st.container():
 
     if "img_orig" not in st.session_state:
         st.markdown("""

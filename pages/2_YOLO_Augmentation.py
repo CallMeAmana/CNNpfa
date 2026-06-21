@@ -7,7 +7,6 @@ import io
 import os
 from PIL import Image
 from pathlib import Path
-from utils import inject_sidebar_toggle
 
 st.set_page_config(
     page_title="YOLO Augmentation",
@@ -23,8 +22,6 @@ try:
     load_css("style.css")
 except FileNotFoundError:
     pass
-
-inject_sidebar_toggle()
 
 st.title("Systeme d'Augmentation YOLO")
 st.markdown("""

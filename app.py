@@ -9,7 +9,6 @@ import io
 import pandas as pd
 from pathlib import Path
 from itertools import product as itertools_product
-from utils import inject_sidebar_toggle
 
 
 def load_css(file_name):
@@ -22,10 +21,9 @@ load_css("style.css")
 st.set_page_config(
     page_title="Data Augmentation — Câblage industriel",
     page_icon="🔬",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
-
-inject_sidebar_toggle()
 
 # --- Badge
 
