@@ -4,12 +4,15 @@ import cv2
 import numpy as np
 from PIL import Image
 import io
+from utils import inject_sidebar_toggle
 
 st.set_page_config(
     page_title="Visualiser Effets — Câblage industriel",
     page_icon="👁",
     layout="wide"
 )
+
+inject_sidebar_toggle()
 
 # ── CSS personnalisé ──────────────────────────────────────────────────────────
 st.markdown("""

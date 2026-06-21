@@ -6,62 +6,269 @@ import zipfile
 import io
 import os
 from PIL import Image
+from pathlib import Path
+from utils import inject_sidebar_toggle
 
-st.set_page_config(page_title="YOLO Augmentation", layout="wide")
-st.title("Augmentation YOLO — avec préservation des annotations")
-st.caption("Upload une image + son fichier .txt YOLO → les bounding boxes sont recalculées automatiquement.")
+st.set_page_config(
+    page_title="YOLO Augmentation",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# ─────────────────────────────────────────────
-# SIDEBAR — Choix des transformations
-# ─────────────────────────────────────────────
-with st.sidebar:
-    st.header("Transformations")
+def load_css(file_name):
+    with open(file_name, encoding="utf-8") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-    n_copies = st.slider("Nombre de copies à générer", 1, 50, 10)
+try:
+    load_css("style.css")
+except FileNotFoundError:
+    pass
 
-    st.subheader("Géométrique")
-    use_flip_h  = st.checkbox("Flip horizontal",  value=True)
-    use_flip_v  = st.checkbox("Flip vertical",    value=False)
-    use_rotate  = st.checkbox("Rotation",         value=True)
-    rot_limit   = st.slider("Rotation max (°)", 5, 30, 15, disabled=not use_rotate)
-    use_zoom    = st.checkbox("Zoom aléatoire",   value=True)
-    zoom_limit  = st.slider("Zoom max (%)", 5, 30, 15, disabled=not use_zoom) / 100
-    use_shift   = st.checkbox("Translation",      value=False)
-    shift_limit = st.slider("Shift max (%)", 2, 15, 5, disabled=not use_shift) / 100
+inject_sidebar_toggle()
 
-    st.subheader("Photométrique")
-    use_brightness = st.checkbox("Luminosité / Contraste", value=True)
-    bright_limit   = st.slider("Intensité luminosité", 0.05, 0.5, 0.3, disabled=not use_brightness)
-    use_noise      = st.checkbox("Bruit gaussien",     value=True)
-    noise_limit    = st.slider("Bruit max",  5, 80, 30, disabled=not use_noise)
-    use_blur       = st.checkbox("Flou gaussien",      value=False)
-    use_hsv        = st.checkbox("HSV (saturation)",   value=True)
-    use_shadow     = st.checkbox("Ombres aléatoires",  value=False)
+st.title("Systeme d'Augmentation YOLO")
+st.markdown("""
+<p style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;color:#4a5568;
+    margin-top:-0.3rem;margin-bottom:1.5rem;">
+    Upload images + annotations .txt Roboflow &mdash; correspondance automatique par nom.&nbsp;&nbsp;
+    <span style="color:rgba(249,115,22,0.4);">|</span>&nbsp;&nbsp;
+    <span style="color:rgba(249,115,22,0.75);">Augmentation aléatoire — bbox préservées</span>
+</p>
+""", unsafe_allow_html=True)
+st.divider()
 
-# ─────────────────────────────────────────────
+BORDER_MODES = {
+    "reflect":   cv2.BORDER_REFLECT,
+    "constant":  cv2.BORDER_CONSTANT,
+    "replicate": cv2.BORDER_REPLICATE,
+}
+
+def _sidebar_family(label):
+    st.sidebar.markdown(f"""
+<div style="display:flex;align-items:center;gap:8px;margin:1.4rem 0 0.6rem;padding:0 2px;">
+    <div style="flex-shrink:0;width:16px;height:1px;background:rgba(0,229,200,0.5);"></div>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;font-weight:500;
+        color:#00e5c8;text-transform:uppercase;letter-spacing:0.2em;white-space:nowrap;">
+        {label}
+    </span>
+    <div style="flex:1;height:1px;background:rgba(0,229,200,0.1);"></div>
+</div>""", unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════
+# SIDEBAR — EN-TÊTE
+# ════════════════════════════════════════════════
+st.sidebar.markdown("""
+<div style="padding:1rem 0.5rem 0.75rem;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.4rem;">
+        <div style="width:28px;height:28px;background:rgba(0,229,200,0.1);
+            border:1px solid rgba(0,229,200,0.3);border-radius:6px;
+            display:flex;align-items:center;justify-content:center;font-size:0.85rem;">
+            &#9707;
+        </div>
+        <span style="font-family:'Syne',sans-serif;font-size:0.78rem;font-weight:700;
+            color:#ffffff;letter-spacing:0.05em;text-transform:uppercase;">
+            Augmentation
+        </span>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;
+        color:rgba(0,229,200,0.5);letter-spacing:0.15em;padding-left:36px;">
+        CONFIGURATION DES TECHNIQUES
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════
+# SIDEBAR — F0 GÉNÉRAL
+# ════════════════════════════════════════════════
+_sidebar_family("F0 &mdash; Général")
+n_copies    = st.sidebar.slider("Copies à générer par image", 1, 50, 10)
+output_size = st.sidebar.selectbox("Résolution de sortie", [224, 512, 768, 1024], index=1)
+
+# ════════════════════════════════════════════════
+# SIDEBAR — F1 GÉOMÉTRIQUE
+# ════════════════════════════════════════════════
+_sidebar_family("F1 &mdash; Géométrique")
+
+use_rotation     = st.sidebar.checkbox("Rotation", value=True)
+rotation_max     = st.sidebar.slider("Angle max (°)", 5, 90, 25, 5, disabled=not use_rotation)
+rotation_border  = st.sidebar.selectbox("Mode remplissage bords", ["reflect", "constant", "replicate"],
+                                         disabled=not use_rotation)
+st.sidebar.markdown("---")
+
+use_flip_h = st.sidebar.checkbox("Flip horizontal", value=True)
+use_flip_v = st.sidebar.checkbox("Flip vertical",   value=False)
+st.sidebar.markdown("---")
+
+use_zoom     = st.sidebar.checkbox("Zoom", value=True)
+zoom_max     = st.sidebar.slider("Facteur zoom max", 1.1, 2.0, 1.3, 0.1, disabled=not use_zoom)
+st.sidebar.markdown("---")
+
+use_perspective  = st.sidebar.checkbox("Perspective", value=False)
+perspective_max  = st.sidebar.slider("Échelle perspective max", 0.01, 0.2, 0.1, 0.01,
+                                      disabled=not use_perspective)
+st.sidebar.markdown("---")
+
+use_shear    = st.sidebar.checkbox("Cisaillement (Shear)", value=False)
+shear_max    = st.sidebar.slider("Angle cisaillement max (°)", 5, 30, 15, 5, disabled=not use_shear)
+st.sidebar.markdown("---")
+
+use_shift    = st.sidebar.checkbox("Translation (Shift)", value=False)
+shift_max    = st.sidebar.slider("Déplacement max (%)", 0.05, 0.3, 0.1, 0.05, disabled=not use_shift)
+
+# ════════════════════════════════════════════════
+# SIDEBAR — F2 PHOTOMÉTRIQUE
+# ════════════════════════════════════════════════
+_sidebar_family("F2 &mdash; Photométrique")
+
+use_brightness   = st.sidebar.checkbox("Luminosité / Contraste", value=True)
+brightness_max   = st.sidebar.slider("Luminosité max", 0.1, 0.5, 0.3, 0.05, disabled=not use_brightness)
+st.sidebar.markdown("---")
+
+use_noise    = st.sidebar.checkbox("Bruit gaussien", value=False)
+noise_max    = st.sidebar.slider("Variance bruit max", 10, 100, 50, 5, disabled=not use_noise)
+st.sidebar.markdown("---")
+
+use_blur     = st.sidebar.checkbox("Flou gaussien", value=False)
+blur_max     = st.sidebar.slider("Noyau flou max (px)", 3, 11, 7, 2, disabled=not use_blur)
+st.sidebar.markdown("---")
+
+use_motion_blur  = st.sidebar.checkbox("Flou de mouvement", value=False)
+motion_max       = st.sidebar.slider("Noyau mouvement max (px)", 3, 21, 9, 2, disabled=not use_motion_blur)
+st.sidebar.markdown("---")
+
+use_hsv      = st.sidebar.checkbox("Saturation HSV", value=True)
+hsv_max      = st.sidebar.slider("Saturation max", 10, 50, 30, 5, disabled=not use_hsv)
+st.sidebar.markdown("---")
+
+use_clahe    = st.sidebar.checkbox("Égalisation CLAHE", value=False)
+clahe_max    = st.sidebar.slider("Clip limit max", 1.0, 8.0, 4.0, 0.5, disabled=not use_clahe)
+st.sidebar.markdown("---")
+
+use_jpeg     = st.sidebar.checkbox("Compression JPEG", value=False)
+jpeg_min     = st.sidebar.slider("Qualité JPEG min", 50, 95, 70, 5, disabled=not use_jpeg)
+st.sidebar.markdown("---")
+
+use_togray   = st.sidebar.checkbox("Niveaux de gris (ToGray)", value=False)
+
+# ════════════════════════════════════════════════
+# SIDEBAR — F4 MIXAGE (pixel-only, bbox inchangées)
+# ════════════════════════════════════════════════
+_sidebar_family("F4 &mdash; Mixage")
+
+use_mixup    = st.sidebar.checkbox("Mixup", value=False)
+mixup_alpha  = st.sidebar.slider("Alpha Mixup max", 0.1, 0.5, 0.3, 0.05, disabled=not use_mixup)
+st.sidebar.markdown("---")
+
+use_cutmix   = st.sidebar.checkbox("CutMix", value=False)
+cutmix_alpha = st.sidebar.slider("Alpha CutMix max", 0.1, 1.0, 0.5, 0.1, disabled=not use_cutmix)
+
+# ════════════════════════════════════════════════
+# SIDEBAR — F5 AVANCÉE
+# ════════════════════════════════════════════════
+_sidebar_family("F5 &mdash; Avancée")
+
+use_elastic  = st.sidebar.checkbox("Elastic Transform", value=False)
+elastic_max  = st.sidebar.slider("Alpha élastique max", 10, 200, 80, 10, disabled=not use_elastic)
+st.sidebar.markdown("---")
+
+use_grid     = st.sidebar.checkbox("Grid Distortion", value=False)
+grid_max     = st.sidebar.slider("Distorsion grille max", 0.1, 0.5, 0.3, 0.05, disabled=not use_grid)
+st.sidebar.markdown("---")
+
+use_optical  = st.sidebar.checkbox("Optical Distortion", value=False)
+optical_max  = st.sidebar.slider("Distorsion optique max", 0.05, 0.5, 0.2, 0.05, disabled=not use_optical)
+
+# ════════════════════════════════════════════════
+# TECHNIQUES ACTIVES
+# ════════════════════════════════════════════════
+techniques_actives = []
+if use_rotation:    techniques_actives.append("Rotation")
+if use_flip_h:      techniques_actives.append("Flip horizontal")
+if use_flip_v:      techniques_actives.append("Flip vertical")
+if use_zoom:        techniques_actives.append("Zoom")
+if use_perspective: techniques_actives.append("Perspective")
+if use_shear:       techniques_actives.append("Cisaillement")
+if use_shift:       techniques_actives.append("Translation")
+if use_brightness:  techniques_actives.append("Luminosité / Contraste")
+if use_noise:       techniques_actives.append("Bruit gaussien")
+if use_blur:        techniques_actives.append("Flou gaussien")
+if use_motion_blur: techniques_actives.append("Flou mouvement")
+if use_hsv:         techniques_actives.append("Saturation HSV")
+if use_clahe:       techniques_actives.append("CLAHE")
+if use_jpeg:        techniques_actives.append("Compression JPEG")
+if use_togray:      techniques_actives.append("Niveaux de gris")
+if use_mixup:       techniques_actives.append("Mixup")
+if use_cutmix:      techniques_actives.append("CutMix")
+if use_elastic:     techniques_actives.append("Elastic Transform")
+if use_grid:        techniques_actives.append("Grid Distortion")
+if use_optical:     techniques_actives.append("Optical Distortion")
+
+# ════════════════════════════════════════════════
+# PARAMÈTRES GLOBAUX
+# ════════════════════════════════════════════════
+st.markdown("""
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
+    <div style="width:36px;height:36px;background:rgba(8,145,178,0.1);
+        border:1px solid rgba(8,145,178,0.25);border-radius:8px;
+        display:flex;align-items:center;justify-content:center;font-size:1.1rem;">&#9881;</div>
+    <div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:#0f2a38;">
+            Parametres globaux</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;
+            color:#3b6e82;letter-spacing:0.12em;text-transform:uppercase;">
+            Configuration active</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+if not techniques_actives:
+    st.warning("Aucune technique activée. Cochez au moins une technique dans le panneau gauche.")
+else:
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Techniques actives", len(techniques_actives))
+    c2.metric("Copies par image",   n_copies)
+    c3.metric("Total par image",    n_copies + 1)
+
+st.divider()
+
+# ════════════════════════════════════════════════
 # FONCTIONS UTILITAIRES
-# ─────────────────────────────────────────────
-def parse_yolo_labels(txt_content: str):
-    """Lit le contenu d'un .txt YOLO → list de (class_id, cx, cy, w, h)."""
+# ════════════════════════════════════════════════
+def parse_labels(txt_content: str):
     labels = []
     for line in txt_content.strip().split("\n"):
         parts = line.strip().split()
-        if len(parts) == 5:
-            cls = int(parts[0])
-            cx, cy, w, h = map(float, parts[1:])
+        if len(parts) < 5:
+            continue
+        cls    = int(parts[0])
+        coords = list(map(float, parts[1:]))
+        if len(coords) == 4:
+            cx, cy, w, h = coords
+            labels.append((cls, cx, cy, w, h))
+        elif len(coords) % 2 == 0 and len(coords) >= 6:
+            xs = coords[0::2]
+            ys = coords[1::2]
+            x_min, x_max = min(xs), max(xs)
+            y_min, y_max = min(ys), max(ys)
+            cx = (x_min + x_max) / 2
+            cy = (y_min + y_max) / 2
+            w  = x_max - x_min
+            h  = y_max - y_min
+            cx, cy = min(max(cx, 0), 1), min(max(cy, 0), 1)
+            w, h   = min(w, 1), min(h, 1)
             labels.append((cls, cx, cy, w, h))
     return labels
 
-def format_yolo_labels(class_labels, bboxes):
-    """Reconstruit le contenu .txt YOLO depuis les résultats Albumentations."""
+
+def format_bbox_labels(class_labels, bboxes):
     lines = []
     for cls, box in zip(class_labels, bboxes):
         cx, cy, w, h = box
         lines.append(f"{cls} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
     return "\n".join(lines)
 
+
 def draw_bboxes(image_rgb, class_labels, bboxes, color=(0, 255, 100)):
-    """Dessine les bounding boxes sur l'image pour prévisualisation."""
     img = image_rgb.copy()
     h, w = img.shape[:2]
     for cls, box in zip(class_labels, bboxes):
@@ -71,37 +278,78 @@ def draw_bboxes(image_rgb, class_labels, bboxes, color=(0, 255, 100)):
         x2 = int((cx + bw / 2) * w)
         y2 = int((cy + bh / 2) * h)
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(img, str(cls), (x1, max(y1 - 6, 10)),
+        cv2.putText(img, str(cls), (x1, max(y1 - 6, 12)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
     return img
 
-def build_augmentor(is_nok_mode: bool):
-    """Construit le pipeline Albumentations selon les options choisies."""
+
+def decode_image(raw_bytes: bytes):
+    arr = np.frombuffer(raw_bytes, np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    img = cv2.resize(img, (output_size, output_size))
+    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+
+def build_augmentor():
     transforms = []
 
+    # F1 — Géométrique
+    if use_rotation:
+        transforms.append(A.Rotate(
+            limit=rotation_max,
+            border_mode=BORDER_MODES[rotation_border],
+            p=0.8
+        ))
     if use_flip_h:
         transforms.append(A.HorizontalFlip(p=0.5))
     if use_flip_v:
         transforms.append(A.VerticalFlip(p=0.2))
-    if use_rotate:
-        transforms.append(A.Rotate(limit=rot_limit, p=0.8))
     if use_zoom:
-        transforms.append(A.RandomScale(scale_limit=zoom_limit, p=0.6))
+        transforms.append(A.RandomScale(scale_limit=zoom_max - 1.0, p=0.6))
+    if use_perspective:
+        transforms.append(A.Perspective(scale=(0.01, perspective_max), p=0.5))
+    if use_shear:
+        transforms.append(A.Affine(shear=(-shear_max, shear_max), p=0.5))
     if use_shift:
         transforms.append(A.ShiftScaleRotate(
-            shift_limit=shift_limit, scale_limit=0, rotate_limit=0, p=0.5))
+            shift_limit=shift_max, scale_limit=0, rotate_limit=0, p=0.6
+        ))
+
+    # F2 — Photométrique
     if use_brightness:
         transforms.append(A.RandomBrightnessContrast(
-            brightness_limit=bright_limit, contrast_limit=bright_limit, p=0.8))
+            brightness_limit=brightness_max, contrast_limit=brightness_max, p=0.8
+        ))
     if use_noise:
-        transforms.append(A.GaussNoise(var_limit=(5, noise_limit), p=0.5))
+        transforms.append(A.GaussNoise(var_limit=(5, noise_max), p=0.5))
     if use_blur:
-        transforms.append(A.GaussianBlur(blur_limit=(3, 7), p=0.3))
+        k = blur_max if blur_max % 2 == 1 else blur_max + 1
+        transforms.append(A.GaussianBlur(blur_limit=(3, max(3, k)), p=0.3))
+    if use_motion_blur:
+        k = motion_max if motion_max % 2 == 1 else motion_max + 1
+        transforms.append(A.MotionBlur(blur_limit=(3, max(3, k)), p=0.4))
     if use_hsv:
         transforms.append(A.HueSaturationValue(
-            hue_shift_limit=10, sat_shift_limit=30, val_shift_limit=20, p=0.5))
-    if use_shadow:
-        transforms.append(A.RandomShadow(p=0.3))
+            hue_shift_limit=10, sat_shift_limit=hsv_max, val_shift_limit=20, p=0.5
+        ))
+    if use_clahe:
+        transforms.append(A.CLAHE(clip_limit=clahe_max, p=0.5))
+    if use_jpeg:
+        transforms.append(A.ImageCompression(
+            quality_lower=jpeg_min, quality_upper=95, p=0.4
+        ))
+    if use_togray:
+        transforms.append(A.ToGray(p=0.3))
+
+    # F5 — Avancée (compatibles bbox)
+    if use_elastic:
+        transforms.append(A.ElasticTransform(alpha=elastic_max, sigma=10, p=0.4))
+    if use_grid:
+        transforms.append(A.GridDistortion(distort_limit=grid_max, p=0.4))
+    if use_optical:
+        transforms.append(A.OpticalDistortion(distort_limit=optical_max, p=0.4))
 
     if not transforms:
         transforms.append(A.HorizontalFlip(p=0.5))
@@ -109,144 +357,305 @@ def build_augmentor(is_nok_mode: bool):
     return A.Compose(
         transforms,
         bbox_params=A.BboxParams(
-            format='yolo',
-            label_fields=['class_labels'],
+            format="yolo",
+            label_fields=["class_labels"],
             min_visibility=0.3
         )
     )
 
-# ─────────────────────────────────────────────
-# INTERFACE PRINCIPALE
-# ─────────────────────────────────────────────
-col_upload, col_preview = st.columns([1, 2])
 
-with col_upload:
-    st.subheader("1. Upload")
-    img_file = st.file_uploader(
-        "Image (.jpg / .png)", type=["jpg", "jpeg", "png"], key="img")
-    txt_file = st.file_uploader(
-        "Annotation YOLO (.txt)", type=["txt"], key="lbl")
+def apply_mixup(img: np.ndarray, other: np.ndarray, alpha_max: float) -> np.ndarray:
+    alpha = float(np.random.uniform(0, alpha_max))
+    other_r = cv2.resize(other, (img.shape[1], img.shape[0]))
+    return (alpha * img.astype(np.float32) + (1 - alpha) * other_r.astype(np.float32)).astype(np.uint8)
 
-    is_nok = st.checkbox(
-        "Image de défaut (NOK) — augmentation agressive",
-        help="Active des transformations plus nombreuses pour les classes sous-représentées."
+
+def apply_cutmix(img: np.ndarray, other: np.ndarray, alpha_max: float) -> np.ndarray:
+    h, w = img.shape[:2]
+    lam  = float(np.random.beta(alpha_max, alpha_max))
+    cut_w = int(w * np.sqrt(1 - lam))
+    cut_h = int(h * np.sqrt(1 - lam))
+    cx    = int(np.random.randint(w))
+    cy    = int(np.random.randint(h))
+    x1, x2 = max(cx - cut_w // 2, 0), min(cx + cut_w // 2, w)
+    y1, y2 = max(cy - cut_h // 2, 0), min(cy + cut_h // 2, h)
+    out = img.copy()
+    patch = cv2.resize(other, (x2 - x1, y2 - y1)) if (x2 > x1 and y2 > y1) else out[y1:y2, x1:x2]
+    out[y1:y2, x1:x2] = patch
+    return out
+
+
+# ════════════════════════════════════════════════
+# SECTION CHARGEMENT
+# ════════════════════════════════════════════════
+st.markdown("""
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
+    <div style="width:36px;height:36px;background:rgba(249,115,22,0.12);
+        border:1px solid rgba(249,115,22,0.3);border-radius:8px;
+        display:flex;align-items:center;justify-content:center;font-size:1.1rem;">&#8681;</div>
+    <div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:#1a1f2e;">
+            Chargement des fichiers</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;
+            color:#4a5568;letter-spacing:0.12em;text-transform:uppercase;">
+            Correspondance automatique par nom de fichier</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+import_mode = st.radio(
+    "Mode d'import",
+    ["Fichiers multiples", "Archive ZIP"],
+    horizontal=True,
+    label_visibility="collapsed"
+)
+
+pairs      = []
+sans_label = []
+
+# ─────────────────────────────────────────────
+# MODE 1 — FICHIERS MULTIPLES
+# ─────────────────────────────────────────────
+if import_mode == "Fichiers multiples":
+    col_img, col_txt = st.columns(2)
+    with col_img:
+        img_files = st.file_uploader(
+            "Images (.jpg / .png)",
+            type=["jpg", "jpeg", "png"],
+            accept_multiple_files=True,
+            key="imgs_multi"
+        )
+    with col_txt:
+        txt_files = st.file_uploader(
+            "Annotations (.txt) — même nom que les images",
+            type=["txt"],
+            accept_multiple_files=True,
+            key="txts_multi"
+        )
+
+    if img_files:
+        txt_map = {Path(f.name).stem: f for f in (txt_files or [])}
+        for img_f in img_files:
+            stem    = Path(img_f.name).stem
+            img_rgb = decode_image(img_f.read())
+            if img_rgb is None:
+                continue
+            if stem not in txt_map:
+                sans_label.append(img_f.name)
+                continue
+            txt_map[stem].seek(0)
+            labels = parse_labels(txt_map[stem].read().decode("utf-8"))
+            if not labels:
+                sans_label.append(img_f.name)
+                continue
+            pairs.append({
+                "stem":      stem,
+                "img_rgb":   img_rgb,
+                "class_ids": [l[0] for l in labels],
+                "bboxes":    [[l[1], l[2], l[3], l[4]] for l in labels],
+            })
+
+# ─────────────────────────────────────────────
+# MODE 2 — ARCHIVE ZIP
+# ─────────────────────────────────────────────
+else:
+    zip_file = st.file_uploader(
+        "Archive ZIP contenant les images + fichiers .txt (même nom)",
+        type=["zip"],
+        key="zip_upload"
+    )
+    if zip_file:
+        with zipfile.ZipFile(io.BytesIO(zip_file.read())) as zf:
+            all_names   = zf.namelist()
+            img_entries = [
+                n for n in all_names
+                if not os.path.basename(n).startswith(".")
+                and not n.startswith("__MACOSX")
+                and Path(n).suffix.lower() in (".jpg", ".jpeg", ".png")
+            ]
+            txt_map = {
+                Path(n).stem: n for n in all_names
+                if not os.path.basename(n).startswith(".")
+                and Path(n).suffix.lower() == ".txt"
+            }
+            for img_name in img_entries:
+                stem    = Path(img_name).stem
+                img_rgb = decode_image(zf.read(img_name))
+                if img_rgb is None:
+                    continue
+                if stem not in txt_map:
+                    sans_label.append(Path(img_name).name)
+                    continue
+                labels = parse_labels(zf.read(txt_map[stem]).decode("utf-8"))
+                if not labels:
+                    sans_label.append(Path(img_name).name)
+                    continue
+                pairs.append({
+                    "stem":      stem,
+                    "img_rgb":   img_rgb,
+                    "class_ids": [l[0] for l in labels],
+                    "bboxes":    [[l[1], l[2], l[3], l[4]] for l in labels],
+                })
+
+# ════════════════════════════════════════════════
+# RÉSULTATS DU CHARGEMENT
+# ════════════════════════════════════════════════
+if sans_label:
+    st.warning(
+        f"{len(sans_label)} image(s) ignorée(s) — aucun .txt correspondant : "
+        f"{', '.join(sans_label[:5])}{'…' if len(sans_label) > 5 else ''}"
     )
 
-if img_file and txt_file:
-    # Chargement image
-    file_bytes = np.frombuffer(img_file.read(), np.uint8)
-    img_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+if not pairs:
+    st.info(
+        "Chargez des images et leurs annotations. "
+        "Le fichier .txt doit avoir **exactement le même nom** que l'image (extension différente)."
+    )
+    st.stop()
 
-    # Chargement labels
-    txt_content = txt_file.read().decode("utf-8")
-    labels = parse_yolo_labels(txt_content)
+total_annotations = sum(len(p["bboxes"]) for p in pairs)
+st.success(
+    f"{len(pairs)} image(s) chargée(s) avec annotation · "
+    f"{total_annotations} bbox(es) au total · résolution {output_size}×{output_size}px"
+)
+st.info(
+    f"Total images à générer : {len(pairs)} images × {n_copies} copies "
+    f"= **{len(pairs) * n_copies} images augmentées** (+ {len(pairs)} originaux)"
+)
 
-    if not labels:
-        st.error("Aucune annotation valide trouvée dans le fichier .txt.")
-        st.stop()
+# Avertissement Mixup/CutMix si une seule image
+if (use_mixup or use_cutmix) and len(pairs) < 2:
+    st.warning("Mixup / CutMix nécessitent au moins 2 images chargées pour mélanger.")
 
-    class_ids = [l[0] for l in labels]
-    bboxes    = [[l[1], l[2], l[3], l[4]] for l in labels]
+# ── Aperçu grille (8 premières images)
+st.divider()
+st.subheader("Aperçu — images chargées avec bounding boxes")
+n_prev    = min(len(pairs), 8)
+cols_prev = st.columns(min(n_prev, 4))
+for i in range(n_prev):
+    p   = pairs[i]
+    vis = draw_bboxes(p["img_rgb"], p["class_ids"], p["bboxes"])
+    cols_prev[i % 4].image(
+        vis,
+        caption=f"{p['stem']} · {len(p['bboxes'])} bbox",
+        use_container_width=True
+    )
+if len(pairs) > 8:
+    st.caption(f"… et {len(pairs) - 8} autre(s) image(s) non affichée(s)")
 
-    with col_preview:
-        st.subheader("2. Aperçu original")
-        img_with_boxes = draw_bboxes(img_rgb, class_ids, bboxes)
-        st.image(img_with_boxes, caption=f"Original — {len(labels)} annotation(s)", use_column_width=True)
-        st.caption(f"Classes détectées : {sorted(set(class_ids))}")
+# ════════════════════════════════════════════════
+# GÉNÉRATION
+# ════════════════════════════════════════════════
+st.divider()
+if st.button("Lancer l'augmentation", type="primary", use_container_width=True):
 
-    # ─────────────────────────────────────────────
-    # GÉNÉRATION
-    # ─────────────────────────────────────────────
-    st.divider()
-    st.subheader("3. Générer les copies augmentées")
+    augmentor       = build_augmentor()
+    zip_buffer      = io.BytesIO()
+    total_target    = len(pairs) * n_copies
+    total_generated = 0
+    total_failed    = 0
+    preview_imgs    = []
 
-    if st.button("Lancer l'augmentation", type="primary"):
-        augmentor = build_augmentor(is_nok)
+    # pré-extraction des images pour Mixup/CutMix
+    all_imgs_rgb = [p["img_rgb"] for p in pairs]
 
-        zip_buffer = io.BytesIO()
-        stem = os.path.splitext(img_file.name)[0]
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        progress = st.progress(0, text="Génération en cours…")
 
-        generated = 0
-        failed    = 0
-        preview_imgs = []
+        for pair in pairs:
+            stem      = pair["stem"]
+            img_rgb   = pair["img_rgb"]
+            class_ids = pair["class_ids"]
+            bboxes    = pair["bboxes"]
 
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-
-            # Inclure l'original dans le ZIP
+            # écriture de l'original
+            img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
             _, orig_enc = cv2.imencode(".jpg", img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
             zf.writestr(f"{stem}_orig.jpg", orig_enc.tobytes())
-            zf.writestr(f"{stem}_orig.txt", txt_content)
+            zf.writestr(f"{stem}_orig.txt", format_bbox_labels(class_ids, bboxes))
 
-            progress = st.progress(0, text="Génération en cours...")
-
-            attempts = 0
-            max_attempts = n_copies * 4
+            generated    = 0
+            attempts     = 0
+            max_attempts = n_copies * 5
 
             while generated < n_copies and attempts < max_attempts:
                 attempts += 1
                 try:
                     result = augmentor(image=img_rgb, bboxes=bboxes, class_labels=class_ids)
-
-                    if not result['bboxes']:
-                        failed += 1
+                    if not result["bboxes"]:
+                        total_failed += 1
                         continue
 
-                    aug_img  = result['image']
-                    aug_cls  = result['class_labels']
-                    aug_bbox = list(result['bboxes'])
+                    aug_rgb   = result["image"]
+                    aug_boxes = list(result["bboxes"])
+                    aug_cls   = list(result["class_labels"])
 
-                    # Encoder image
-                    aug_bgr = cv2.cvtColor(aug_img, cv2.COLOR_RGB2BGR)
-                    _, aug_enc = cv2.imencode(".jpg", aug_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                    # ToGray : reconvertir en RGB 3 canaux si nécessaire
+                    if len(aug_rgb.shape) == 2:
+                        aug_rgb = cv2.cvtColor(aug_rgb, cv2.COLOR_GRAY2RGB)
 
-                    # Créer label .txt
-                    aug_txt = format_yolo_labels(aug_cls, aug_bbox)
+                    # F4 — Mixup (pixels uniquement, bbox inchangées)
+                    if use_mixup and len(all_imgs_rgb) > 1:
+                        other = all_imgs_rgb[int(np.random.randint(len(all_imgs_rgb)))]
+                        aug_rgb = apply_mixup(aug_rgb, other, mixup_alpha)
+
+                    # F4 — CutMix (pixels uniquement, bbox inchangées)
+                    if use_cutmix and len(all_imgs_rgb) > 1:
+                        other = all_imgs_rgb[int(np.random.randint(len(all_imgs_rgb)))]
+                        aug_rgb = apply_cutmix(aug_rgb, other, cutmix_alpha)
+
+                    aug_bgr = cv2.cvtColor(aug_rgb, cv2.COLOR_RGB2BGR)
+                    _, enc  = cv2.imencode(".jpg", aug_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                    aug_txt = format_bbox_labels(aug_cls, aug_boxes)
 
                     fname = f"{stem}_aug{generated:03d}"
-                    zf.writestr(f"{fname}.jpg", aug_enc.tobytes())
+                    zf.writestr(f"{fname}.jpg", enc.tobytes())
                     zf.writestr(f"{fname}.txt", aug_txt)
 
-                    # Garder 4 aperçus max
-                    if len(preview_imgs) < 4:
-                        preview_imgs.append((aug_img, aug_cls, aug_bbox))
+                    if len(preview_imgs) < 8:
+                        preview_imgs.append((aug_rgb, aug_cls, aug_boxes))
 
-                    generated += 1
-                    progress.progress(generated / n_copies,
-                                      text=f"Génération : {generated}/{n_copies}")
+                    generated       += 1
+                    total_generated += 1
+                    progress.progress(
+                        total_generated / total_target,
+                        text=f"Génération : {total_generated}/{total_target}  ({stem})"
+                    )
+                except Exception:
+                    total_failed += 1
 
-                except Exception as e:
-                    failed += 1
+        progress.empty()
 
-            progress.empty()
+    st.success(
+        f"{total_generated} images générées · "
+        f"{len(pairs)} originaux inclus · "
+        f"{total_failed} rejet(s) (bbox hors cadre)"
+    )
 
-        # ─── Résultats ───
-        st.success(f"✅ {generated} images générées ({failed} tentatives échouées — bbox hors cadre).")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Originaux",       len(pairs))
+    c2.metric("Copies générées", total_generated)
+    c3.metric("Total dataset",   total_generated + len(pairs))
+    c4.metric("Techniques",      len(techniques_actives))
 
-        # Aperçu des 4 premières
-        st.subheader("Aperçu des premières copies")
-        preview_cols = st.columns(min(4, len(preview_imgs)))
-        for i, (p_img, p_cls, p_bbox) in enumerate(preview_imgs):
-            with preview_cols[i]:
-                p_drawn = draw_bboxes(p_img, p_cls, p_bbox)
-                st.image(p_drawn, caption=f"aug_{i:03d}", use_column_width=True)
+    if preview_imgs:
+        st.divider()
+        st.subheader("Aperçu — premières copies augmentées")
+        cols_res = st.columns(min(4, len(preview_imgs)))
+        for i, (pi, pc, pb) in enumerate(preview_imgs):
+            cols_res[i % 4].image(
+                draw_bboxes(pi, pc, pb),
+                caption=f"aug_{i:03d}",
+                use_container_width=True
+            )
 
-        # ─── Téléchargement ZIP ───
-        st.download_button(
-            label=f"⬇ Télécharger le ZIP ({generated + 1} images + annotations)",
-            data=zip_buffer.getvalue(),
-            file_name=f"{stem}_augmented_{generated}copies.zip",
-            mime="application/zip",
-        )
-
-        st.info(
-            f"Le ZIP contient **{generated + 1} images** (original inclus) "
-            f"et **{generated + 1} fichiers .txt YOLO** — zéro ré-annotation nécessaire."
-        )
-
-elif img_file and not txt_file:
-    st.warning("Upload le fichier .txt YOLO correspondant à l'image.")
-elif txt_file and not img_file:
-    st.warning("Upload l'image correspondant au fichier .txt.")
-else:
-    st.info("Upload une image et son fichier d'annotation .txt YOLO pour commencer.")
+    st.divider()
+    st.subheader("Télécharger le dataset augmenté")
+    st.download_button(
+        label=f"Télécharger {total_generated + len(pairs)} images + annotations (ZIP)",
+        data=zip_buffer.getvalue(),
+        file_name="dataset_yolo_augmente.zip",
+        mime="application/zip",
+        use_container_width=True
+    )
+    st.caption("Chaque image est accompagnée de son fichier .txt YOLO mis à jour.")

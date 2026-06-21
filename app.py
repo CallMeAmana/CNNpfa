@@ -9,6 +9,7 @@ import io
 import pandas as pd
 from pathlib import Path
 from itertools import product as itertools_product
+from utils import inject_sidebar_toggle
 
 
 def load_css(file_name):
@@ -23,6 +24,8 @@ st.set_page_config(
     page_icon="🔬",
     layout="wide"
 )
+
+inject_sidebar_toggle()
 
 # --- Badge
 
