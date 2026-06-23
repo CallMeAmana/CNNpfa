@@ -90,6 +90,7 @@ use_rotation     = st.sidebar.checkbox("Rotation", value=True)
 rotation_max     = st.sidebar.slider("Angle max (°)", 5, 90, 25, 5, disabled=not use_rotation)
 rotation_border  = st.sidebar.selectbox("Mode remplissage bords", ["reflect", "constant", "replicate"],
                                          disabled=not use_rotation)
+rotation_pas     = st.sidebar.number_input("Nombre de pas — Rotation", 1, 20, 3, disabled=not use_rotation)
 st.sidebar.markdown("---")
 
 use_flip_h = st.sidebar.checkbox("Flip horizontal", value=True)
@@ -98,19 +99,23 @@ st.sidebar.markdown("---")
 
 use_zoom     = st.sidebar.checkbox("Zoom", value=True)
 zoom_max     = st.sidebar.slider("Facteur zoom max", 1.1, 2.0, 1.3, 0.1, disabled=not use_zoom)
+zoom_pas     = st.sidebar.number_input("Nombre de pas — Zoom", 1, 20, 3, disabled=not use_zoom)
 st.sidebar.markdown("---")
 
 use_perspective  = st.sidebar.checkbox("Perspective", value=False)
 perspective_max  = st.sidebar.slider("Échelle perspective max", 0.01, 0.2, 0.1, 0.01,
                                       disabled=not use_perspective)
+perspective_pas  = st.sidebar.number_input("Nombre de pas — Perspective", 1, 10, 3, disabled=not use_perspective)
 st.sidebar.markdown("---")
 
 use_shear    = st.sidebar.checkbox("Cisaillement (Shear)", value=False)
 shear_max    = st.sidebar.slider("Angle cisaillement max (°)", 5, 30, 15, 5, disabled=not use_shear)
+shear_pas    = st.sidebar.number_input("Nombre de pas — Cisaillement", 1, 10, 3, disabled=not use_shear)
 st.sidebar.markdown("---")
 
 use_shift    = st.sidebar.checkbox("Translation (Shift)", value=False)
 shift_max    = st.sidebar.slider("Déplacement max (%)", 0.05, 0.3, 0.1, 0.05, disabled=not use_shift)
+shift_pas    = st.sidebar.number_input("Nombre de pas — Translation", 1, 10, 3, disabled=not use_shift)
 
 # ════════════════════════════════════════════════
 # SIDEBAR — F2 PHOTOMÉTRIQUE
@@ -119,30 +124,37 @@ _sidebar_family("F2 &mdash; Photométrique")
 
 use_brightness   = st.sidebar.checkbox("Luminosité / Contraste", value=True)
 brightness_max   = st.sidebar.slider("Luminosité max", 0.1, 0.5, 0.3, 0.05, disabled=not use_brightness)
+brightness_pas   = st.sidebar.number_input("Nombre de pas — Luminosité", 1, 10, 3, disabled=not use_brightness)
 st.sidebar.markdown("---")
 
 use_noise    = st.sidebar.checkbox("Bruit gaussien", value=False)
 noise_max    = st.sidebar.slider("Variance bruit max", 10, 100, 50, 5, disabled=not use_noise)
+noise_pas    = st.sidebar.number_input("Nombre de pas — Bruit", 1, 10, 3, disabled=not use_noise)
 st.sidebar.markdown("---")
 
 use_blur     = st.sidebar.checkbox("Flou gaussien", value=False)
 blur_max     = st.sidebar.slider("Noyau flou max (px)", 3, 11, 7, 2, disabled=not use_blur)
+blur_pas     = st.sidebar.number_input("Nombre de pas — Flou gaussien", 1, 10, 3, disabled=not use_blur)
 st.sidebar.markdown("---")
 
 use_motion_blur  = st.sidebar.checkbox("Flou de mouvement", value=False)
 motion_max       = st.sidebar.slider("Noyau mouvement max (px)", 3, 21, 9, 2, disabled=not use_motion_blur)
+motion_pas       = st.sidebar.number_input("Nombre de pas — Flou mouvement", 1, 10, 3, disabled=not use_motion_blur)
 st.sidebar.markdown("---")
 
 use_hsv      = st.sidebar.checkbox("Saturation HSV", value=True)
 hsv_max      = st.sidebar.slider("Saturation max", 10, 50, 30, 5, disabled=not use_hsv)
+hsv_pas      = st.sidebar.number_input("Nombre de pas — HSV", 1, 10, 3, disabled=not use_hsv)
 st.sidebar.markdown("---")
 
 use_clahe    = st.sidebar.checkbox("Égalisation CLAHE", value=False)
 clahe_max    = st.sidebar.slider("Clip limit max", 1.0, 8.0, 4.0, 0.5, disabled=not use_clahe)
+clahe_pas    = st.sidebar.number_input("Nombre de pas — CLAHE", 1, 10, 3, disabled=not use_clahe)
 st.sidebar.markdown("---")
 
 use_jpeg     = st.sidebar.checkbox("Compression JPEG", value=False)
 jpeg_min     = st.sidebar.slider("Qualité JPEG min", 50, 95, 70, 5, disabled=not use_jpeg)
+jpeg_pas     = st.sidebar.number_input("Nombre de pas — JPEG", 1, 10, 3, disabled=not use_jpeg)
 st.sidebar.markdown("---")
 
 use_togray   = st.sidebar.checkbox("Niveaux de gris (ToGray)", value=False)
@@ -154,10 +166,12 @@ _sidebar_family("F4 &mdash; Mixage")
 
 use_mixup    = st.sidebar.checkbox("Mixup", value=False)
 mixup_alpha  = st.sidebar.slider("Alpha Mixup max", 0.1, 0.5, 0.3, 0.05, disabled=not use_mixup)
+mixup_pas    = st.sidebar.number_input("Nombre de pas — Mixup", 1, 10, 3, disabled=not use_mixup)
 st.sidebar.markdown("---")
 
 use_cutmix   = st.sidebar.checkbox("CutMix", value=False)
 cutmix_alpha = st.sidebar.slider("Alpha CutMix max", 0.1, 1.0, 0.5, 0.1, disabled=not use_cutmix)
+cutmix_pas   = st.sidebar.number_input("Nombre de pas — CutMix", 1, 10, 3, disabled=not use_cutmix)
 
 # ════════════════════════════════════════════════
 # SIDEBAR — F5 AVANCÉE
@@ -166,39 +180,46 @@ _sidebar_family("F5 &mdash; Avancée")
 
 use_elastic  = st.sidebar.checkbox("Elastic Transform", value=False)
 elastic_max  = st.sidebar.slider("Alpha élastique max", 10, 200, 80, 10, disabled=not use_elastic)
+elastic_pas  = st.sidebar.number_input("Nombre de pas — Elastic Transform", 1, 10, 3, disabled=not use_elastic)
 st.sidebar.markdown("---")
 
 use_grid     = st.sidebar.checkbox("Grid Distortion", value=False)
 grid_max     = st.sidebar.slider("Distorsion grille max", 0.1, 0.5, 0.3, 0.05, disabled=not use_grid)
+grid_pas     = st.sidebar.number_input("Nombre de pas — Grid Distortion", 1, 10, 3, disabled=not use_grid)
 st.sidebar.markdown("---")
 
 use_optical  = st.sidebar.checkbox("Optical Distortion", value=False)
 optical_max  = st.sidebar.slider("Distorsion optique max", 0.05, 0.5, 0.2, 0.05, disabled=not use_optical)
+optical_pas  = st.sidebar.number_input("Nombre de pas — Optical Distortion", 1, 10, 3, disabled=not use_optical)
 
 # ════════════════════════════════════════════════
 # TECHNIQUES ACTIVES
 # ════════════════════════════════════════════════
 techniques_actives = []
-if use_rotation:    techniques_actives.append("Rotation")
-if use_flip_h:      techniques_actives.append("Flip horizontal")
-if use_flip_v:      techniques_actives.append("Flip vertical")
-if use_zoom:        techniques_actives.append("Zoom")
-if use_perspective: techniques_actives.append("Perspective")
-if use_shear:       techniques_actives.append("Cisaillement")
-if use_shift:       techniques_actives.append("Translation")
-if use_brightness:  techniques_actives.append("Luminosité / Contraste")
-if use_noise:       techniques_actives.append("Bruit gaussien")
-if use_blur:        techniques_actives.append("Flou gaussien")
-if use_motion_blur: techniques_actives.append("Flou mouvement")
-if use_hsv:         techniques_actives.append("Saturation HSV")
-if use_clahe:       techniques_actives.append("CLAHE")
-if use_jpeg:        techniques_actives.append("Compression JPEG")
-if use_togray:      techniques_actives.append("Niveaux de gris")
-if use_mixup:       techniques_actives.append("Mixup")
-if use_cutmix:      techniques_actives.append("CutMix")
-if use_elastic:     techniques_actives.append("Elastic Transform")
-if use_grid:        techniques_actives.append("Grid Distortion")
-if use_optical:     techniques_actives.append("Optical Distortion")
+if use_rotation:    techniques_actives.append({"nom": "Rotation", "nb_pas": int(rotation_pas)})
+if use_flip_h:      techniques_actives.append({"nom": "Flip horizontal", "nb_pas": 1})
+if use_flip_v:      techniques_actives.append({"nom": "Flip vertical", "nb_pas": 1})
+if use_zoom:        techniques_actives.append({"nom": "Zoom", "nb_pas": int(zoom_pas)})
+if use_perspective: techniques_actives.append({"nom": "Perspective", "nb_pas": int(perspective_pas)})
+if use_shear:       techniques_actives.append({"nom": "Cisaillement", "nb_pas": int(shear_pas)})
+if use_shift:       techniques_actives.append({"nom": "Translation", "nb_pas": int(shift_pas)})
+if use_brightness:  techniques_actives.append({"nom": "Luminosité / Contraste", "nb_pas": int(brightness_pas)})
+if use_noise:       techniques_actives.append({"nom": "Bruit gaussien", "nb_pas": int(noise_pas)})
+if use_blur:        techniques_actives.append({"nom": "Flou gaussien", "nb_pas": int(blur_pas)})
+if use_motion_blur: techniques_actives.append({"nom": "Flou mouvement", "nb_pas": int(motion_pas)})
+if use_hsv:         techniques_actives.append({"nom": "Saturation HSV", "nb_pas": int(hsv_pas)})
+if use_clahe:       techniques_actives.append({"nom": "CLAHE", "nb_pas": int(clahe_pas)})
+if use_jpeg:        techniques_actives.append({"nom": "Compression JPEG", "nb_pas": int(jpeg_pas)})
+if use_togray:      techniques_actives.append({"nom": "Niveaux de gris", "nb_pas": 1})
+if use_mixup:       techniques_actives.append({"nom": "Mixup", "nb_pas": int(mixup_pas)})
+if use_cutmix:      techniques_actives.append({"nom": "CutMix", "nb_pas": int(cutmix_pas)})
+if use_elastic:     techniques_actives.append({"nom": "Elastic Transform", "nb_pas": int(elastic_pas)})
+if use_grid:        techniques_actives.append({"nom": "Grid Distortion", "nb_pas": int(grid_pas)})
+if use_optical:     techniques_actives.append({"nom": "Optical Distortion", "nb_pas": int(optical_pas)})
+
+x = 1
+for technique in techniques_actives:
+    x *= technique["nb_pas"]
 
 # ════════════════════════════════════════════════
 # PARAMÈTRES GLOBAUX
@@ -223,8 +244,8 @@ if not techniques_actives:
 else:
     c1, c2, c3 = st.columns(3)
     c1.metric("Techniques actives", len(techniques_actives))
-    c2.metric("Copies par image",   n_copies)
-    c3.metric("Total par image",    n_copies + 1)
+    c2.metric("Facteur x",           x)
+    c3.metric("Total par image",    n_copies * x + 1)
 
 st.divider()
 
@@ -515,9 +536,10 @@ st.success(
     f"{len(pairs)} image(s) chargée(s) avec annotation · "
     f"{total_annotations} bbox(es) au total · résolution {output_size}×{output_size}px"
 )
+expected_per_image = n_copies * x
 st.info(
-    f"Total images à générer : {len(pairs)} images × {n_copies} copies "
-    f"= **{len(pairs) * n_copies} images augmentées** (+ {len(pairs)} originaux)"
+    f"Total images à générer : {len(pairs)} images × {n_copies} copies × {x} (facteur) "
+    f"= **{len(pairs) * expected_per_image} images augmentées** (+ {len(pairs)} originaux)"
 )
 
 # Avertissement Mixup/CutMix si une seule image
@@ -540,6 +562,27 @@ for i in range(n_prev):
 if len(pairs) > 8:
     st.caption(f"… et {len(pairs) - 8} autre(s) image(s) non affichée(s)")
 
+# ── Toutes les images chargées (scrollable)
+def _encode_img_to_data_uri(img_rgb):
+    from io import BytesIO
+    import base64
+    is_success, buf = cv2.imencode('.jpg', cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR))
+    if not is_success:
+        return None
+    b64 = base64.b64encode(buf.tobytes()).decode('ascii')
+    return f"data:image/jpeg;base64,{b64}"
+
+st.markdown("**Toutes les images chargées**")
+imgs_html = [f"<div style='display:flex;flex-direction:column;align-items:center;margin:6px;'>"
+             f"<img src='{_encode_img_to_data_uri(draw_bboxes(p['img_rgb'], p['class_ids'], p['bboxes']))}' "
+             f"style='width:180px;height:auto;border-radius:6px;object-fit:cover;'/><div "
+             f"style='font-size:0.75rem;margin-top:4px;color:#334455'>{p['stem']} · {len(p['bboxes'])} bbox</div></div>"
+             for p in pairs]
+
+grid_html = "".join(imgs_html)
+container_html = f"<div style='max-height:420px;overflow:auto;display:flex;flex-wrap:wrap;gap:8px;padding:6px;border:1px solid rgba(0,0,0,0.04);'>{grid_html}</div>"
+st.markdown(container_html, unsafe_allow_html=True)
+
 # ════════════════════════════════════════════════
 # GÉNÉRATION
 # ════════════════════════════════════════════════
@@ -548,7 +591,7 @@ if st.button("Lancer l'augmentation", type="primary", use_container_width=True):
 
     augmentor       = build_augmentor()
     zip_buffer      = io.BytesIO()
-    total_target    = len(pairs) * n_copies
+    total_target    = len(pairs) * n_copies * x
     total_generated = 0
     total_failed    = 0
     preview_imgs    = []
@@ -573,9 +616,9 @@ if st.button("Lancer l'augmentation", type="primary", use_container_width=True):
 
             generated    = 0
             attempts     = 0
-            max_attempts = n_copies * 5
+            max_attempts = n_copies * x * 5
 
-            while generated < n_copies and attempts < max_attempts:
+            while generated < n_copies * x and attempts < max_attempts:
                 attempts += 1
                 try:
                     result = augmentor(image=img_rgb, bboxes=bboxes, class_labels=class_ids)
@@ -645,6 +688,27 @@ if st.button("Lancer l'augmentation", type="primary", use_container_width=True):
                 caption=f"aug_{i:03d}",
                 use_container_width=True
             )
+
+    # ── Toutes les images augmentées (scrollable) — extraites depuis le ZIP en mémoire
+    try:
+        import base64
+        with zipfile.ZipFile(io.BytesIO(zip_buffer.getvalue())) as zf2:
+            aug_names = [n for n in zf2.namelist() if n.lower().endswith('.jpg') and '_aug' in n]
+            if aug_names:
+                thumbs = []
+                for name in aug_names:
+                    data = zf2.read(name)
+                    b64 = base64.b64encode(data).decode('ascii')
+                    thumbs.append(f"<div style='display:flex;flex-direction:column;align-items:center;margin:6px;'>"
+                                  f"<img src='data:image/jpeg;base64,{b64}' style='width:160px;height:auto;border-radius:6px;object-fit:cover;'/>"
+                                  f"<div style='font-size:0.72rem;margin-top:4px;color:#334455'>{name}</div></div>")
+
+                grid = ''.join(thumbs)
+                sc_html = f"<div style='max-height:520px;overflow:auto;display:flex;flex-wrap:wrap;gap:8px;padding:6px;border:1px solid rgba(0,0,0,0.04);'>{grid}</div>"
+                st.markdown("**Toutes les images augmentées**")
+                st.markdown(sc_html, unsafe_allow_html=True)
+    except Exception:
+        pass
 
     st.divider()
     st.subheader("Télécharger le dataset augmenté")
