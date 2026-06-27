@@ -119,7 +119,8 @@ clean_inpaint_r  = st.sidebar.slider(
 # SIDEBAR — F0 GÉNÉRAL
 # ════════════════════════════════════════════════
 _sidebar_family("F0 &mdash; Général")
-n_copies    = st.sidebar.slider("Copies à générer par image", 1, 50, 10)
+n_copies    = st.sidebar.slider("Copies à générer par image", 1, 50, 3,
+                                 help="OK -> 2 | pclipAbsent -> 3 | ticketManquant -> 6")
 output_size = st.sidebar.selectbox("Dimension max de sortie (px)", [512, 768, 1024, 1536, 2048], index=2)
 st.sidebar.caption("Ratio d'aspect natif préservé après crop — aucune déformation, aucun padding ajouté")
 
@@ -129,10 +130,10 @@ st.sidebar.caption("Ratio d'aspect natif préservé après crop — aucune défo
 _sidebar_family("F1 &mdash; Géométrique")
 
 use_rotation     = st.sidebar.checkbox("Rotation", value=True)
-rotation_max     = st.sidebar.slider("Angle max (°)", 5, 90, 25, 5, disabled=not use_rotation)
+rotation_max     = st.sidebar.slider("Angle max (°)", 5, 90, 15, 5, disabled=not use_rotation)
 rotation_border  = st.sidebar.selectbox("Mode remplissage bords", ["reflect", "constant", "replicate"],
                                          disabled=not use_rotation)
-rotation_pas     = st.sidebar.number_input("Nombre de pas — Rotation", 1, 20, 3, disabled=not use_rotation)
+rotation_pas     = st.sidebar.number_input("Nombre de pas — Rotation", 1, 20, 1, disabled=not use_rotation)
 st.sidebar.markdown("---")
 
 use_flip_h = st.sidebar.checkbox("Flip horizontal", value=True)
@@ -140,24 +141,24 @@ use_flip_v = st.sidebar.checkbox("Flip vertical",   value=False)
 st.sidebar.markdown("---")
 
 use_zoom     = st.sidebar.checkbox("Zoom", value=True)
-zoom_max     = st.sidebar.slider("Facteur zoom max", 1.1, 2.0, 1.3, 0.1, disabled=not use_zoom)
-zoom_pas     = st.sidebar.number_input("Nombre de pas — Zoom", 1, 20, 3, disabled=not use_zoom)
+zoom_max     = st.sidebar.slider("Facteur zoom max", 1.1, 2.0, 1.2, 0.1, disabled=not use_zoom)
+zoom_pas     = st.sidebar.number_input("Nombre de pas — Zoom", 1, 20, 1, disabled=not use_zoom)
 st.sidebar.markdown("---")
 
 use_perspective  = st.sidebar.checkbox("Perspective", value=False)
 perspective_max  = st.sidebar.slider("Échelle perspective max", 0.01, 0.2, 0.1, 0.01,
                                       disabled=not use_perspective)
-perspective_pas  = st.sidebar.number_input("Nombre de pas — Perspective", 1, 10, 3, disabled=not use_perspective)
+perspective_pas  = st.sidebar.number_input("Nombre de pas — Perspective", 1, 10, 1, disabled=not use_perspective)
 st.sidebar.markdown("---")
 
 use_shear    = st.sidebar.checkbox("Cisaillement (Shear)", value=False)
 shear_max    = st.sidebar.slider("Angle cisaillement max (°)", 5, 30, 15, 5, disabled=not use_shear)
-shear_pas    = st.sidebar.number_input("Nombre de pas — Cisaillement", 1, 10, 3, disabled=not use_shear)
+shear_pas    = st.sidebar.number_input("Nombre de pas — Cisaillement", 1, 10, 1, disabled=not use_shear)
 st.sidebar.markdown("---")
 
-use_shift    = st.sidebar.checkbox("Translation (Shift)", value=False)
-shift_max    = st.sidebar.slider("Déplacement max (%)", 0.05, 0.3, 0.1, 0.05, disabled=not use_shift)
-shift_pas    = st.sidebar.number_input("Nombre de pas — Translation", 1, 10, 3, disabled=not use_shift)
+use_shift    = st.sidebar.checkbox("Translation (Shift)", value=True)
+shift_max    = st.sidebar.slider("Déplacement max (%)", 0.05, 0.3, 0.10, 0.05, disabled=not use_shift)
+shift_pas    = st.sidebar.number_input("Nombre de pas — Translation", 1, 10, 1, disabled=not use_shift)
 
 # ════════════════════════════════════════════════
 # SIDEBAR — F2 PHOTOMÉTRIQUE
@@ -165,38 +166,38 @@ shift_pas    = st.sidebar.number_input("Nombre de pas — Translation", 1, 10, 3
 _sidebar_family("F2 &mdash; Photométrique")
 
 use_brightness   = st.sidebar.checkbox("Luminosité / Contraste", value=True)
-brightness_max   = st.sidebar.slider("Luminosité max", 0.1, 0.5, 0.3, 0.05, disabled=not use_brightness)
-brightness_pas   = st.sidebar.number_input("Nombre de pas — Luminosité", 1, 10, 3, disabled=not use_brightness)
+brightness_max   = st.sidebar.slider("Luminosité max", 0.1, 0.5, 0.25, 0.05, disabled=not use_brightness)
+brightness_pas   = st.sidebar.number_input("Nombre de pas — Luminosité", 1, 10, 1, disabled=not use_brightness)
 st.sidebar.markdown("---")
 
 use_noise    = st.sidebar.checkbox("Bruit gaussien", value=False)
-noise_max    = st.sidebar.slider("Variance bruit max", 10, 100, 50, 5, disabled=not use_noise)
-noise_pas    = st.sidebar.number_input("Nombre de pas — Bruit", 1, 10, 3, disabled=not use_noise)
+noise_max    = st.sidebar.slider("Variance bruit max", 10, 100, 20, 5, disabled=not use_noise)
+noise_pas    = st.sidebar.number_input("Nombre de pas — Bruit", 1, 10, 1, disabled=not use_noise)
 st.sidebar.markdown("---")
 
 use_blur     = st.sidebar.checkbox("Flou gaussien", value=False)
 blur_max     = st.sidebar.slider("Noyau flou max (px)", 3, 11, 7, 2, disabled=not use_blur)
-blur_pas     = st.sidebar.number_input("Nombre de pas — Flou gaussien", 1, 10, 3, disabled=not use_blur)
+blur_pas     = st.sidebar.number_input("Nombre de pas — Flou gaussien", 1, 10, 1, disabled=not use_blur)
 st.sidebar.markdown("---")
 
 use_motion_blur  = st.sidebar.checkbox("Flou de mouvement", value=False)
 motion_max       = st.sidebar.slider("Noyau mouvement max (px)", 3, 21, 9, 2, disabled=not use_motion_blur)
-motion_pas       = st.sidebar.number_input("Nombre de pas — Flou mouvement", 1, 10, 3, disabled=not use_motion_blur)
+motion_pas       = st.sidebar.number_input("Nombre de pas — Flou mouvement", 1, 10, 1, disabled=not use_motion_blur)
 st.sidebar.markdown("---")
 
 use_hsv      = st.sidebar.checkbox("Saturation HSV", value=True)
-hsv_max      = st.sidebar.slider("Saturation max", 10, 50, 30, 5, disabled=not use_hsv)
-hsv_pas      = st.sidebar.number_input("Nombre de pas — HSV", 1, 10, 3, disabled=not use_hsv)
+hsv_max      = st.sidebar.slider("Saturation max", 10, 50, 20, 5, disabled=not use_hsv)
+hsv_pas      = st.sidebar.number_input("Nombre de pas — HSV", 1, 10, 1, disabled=not use_hsv)
 st.sidebar.markdown("---")
 
 use_clahe    = st.sidebar.checkbox("Égalisation CLAHE", value=False)
 clahe_max    = st.sidebar.slider("Clip limit max", 1.0, 8.0, 4.0, 0.5, disabled=not use_clahe)
-clahe_pas    = st.sidebar.number_input("Nombre de pas — CLAHE", 1, 10, 3, disabled=not use_clahe)
+clahe_pas    = st.sidebar.number_input("Nombre de pas — CLAHE", 1, 10, 1, disabled=not use_clahe)
 st.sidebar.markdown("---")
 
 use_jpeg     = st.sidebar.checkbox("Compression JPEG", value=False)
 jpeg_min     = st.sidebar.slider("Qualité JPEG min", 50, 95, 70, 5, disabled=not use_jpeg)
-jpeg_pas     = st.sidebar.number_input("Nombre de pas — JPEG", 1, 10, 3, disabled=not use_jpeg)
+jpeg_pas     = st.sidebar.number_input("Nombre de pas — JPEG", 1, 10, 1, disabled=not use_jpeg)
 st.sidebar.markdown("---")
 
 use_togray   = st.sidebar.checkbox("Niveaux de gris (ToGray)", value=False)
@@ -208,12 +209,12 @@ _sidebar_family("F4 &mdash; Mixage")
 
 use_mixup    = st.sidebar.checkbox("Mixup", value=False)
 mixup_alpha  = st.sidebar.slider("Alpha Mixup max", 0.1, 0.5, 0.3, 0.05, disabled=not use_mixup)
-mixup_pas    = st.sidebar.number_input("Nombre de pas — Mixup", 1, 10, 3, disabled=not use_mixup)
+mixup_pas    = st.sidebar.number_input("Nombre de pas — Mixup", 1, 10, 1, disabled=not use_mixup)
 st.sidebar.markdown("---")
 
 use_cutmix   = st.sidebar.checkbox("CutMix", value=False)
 cutmix_alpha = st.sidebar.slider("Alpha CutMix max", 0.1, 1.0, 0.5, 0.1, disabled=not use_cutmix)
-cutmix_pas   = st.sidebar.number_input("Nombre de pas — CutMix", 1, 10, 3, disabled=not use_cutmix)
+cutmix_pas   = st.sidebar.number_input("Nombre de pas — CutMix", 1, 10, 1, disabled=not use_cutmix)
 
 # ════════════════════════════════════════════════
 # SIDEBAR — F5 AVANCÉE
@@ -222,17 +223,17 @@ _sidebar_family("F5 &mdash; Avancée")
 
 use_elastic  = st.sidebar.checkbox("Elastic Transform", value=False)
 elastic_max  = st.sidebar.slider("Alpha élastique max", 10, 200, 80, 10, disabled=not use_elastic)
-elastic_pas  = st.sidebar.number_input("Nombre de pas — Elastic Transform", 1, 10, 3, disabled=not use_elastic)
+elastic_pas  = st.sidebar.number_input("Nombre de pas — Elastic Transform", 1, 10, 1, disabled=not use_elastic)
 st.sidebar.markdown("---")
 
 use_grid     = st.sidebar.checkbox("Grid Distortion", value=False)
 grid_max     = st.sidebar.slider("Distorsion grille max", 0.1, 0.5, 0.3, 0.05, disabled=not use_grid)
-grid_pas     = st.sidebar.number_input("Nombre de pas — Grid Distortion", 1, 10, 3, disabled=not use_grid)
+grid_pas     = st.sidebar.number_input("Nombre de pas — Grid Distortion", 1, 10, 1, disabled=not use_grid)
 st.sidebar.markdown("---")
 
 use_optical  = st.sidebar.checkbox("Optical Distortion", value=False)
 optical_max  = st.sidebar.slider("Distorsion optique max", 0.05, 0.5, 0.2, 0.05, disabled=not use_optical)
-optical_pas  = st.sidebar.number_input("Nombre de pas — Optical Distortion", 1, 10, 3, disabled=not use_optical)
+optical_pas  = st.sidebar.number_input("Nombre de pas — Optical Distortion", 1, 10, 1, disabled=not use_optical)
 
 # ════════════════════════════════════════════════
 # TECHNIQUES ACTIVES
