@@ -105,19 +105,26 @@ BORDER_MODES = {
 def clean_background_spots(img_rgb: np.ndarray, bg_thresh=185, max_spot_area=800, inpaint_radius=7) -> np.ndarray:
     """Supprime les petites taches sombres sur fond clair (inpainting TELEA)."""
     gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
-    dark_mask = np.where(gray < bg_thresh, np.uint8(255), np.uint8(0))
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(dark_mask, connectivity=8)
-    spots_mask = np.zeros(img_rgb.shape[:2], dtype=np.uint8)
-    for i in range(1, num_labels):
-        if stats[i, cv2.CC_STAT_AREA] <= max_spot_area:
-            spots_mask[labels == i] = 255
-    if not spots_mask.any():
+    dark_mask = (gray < bg_thresh).view(np.uint8) * 255
+    del gray
+
+    _, labels, stats, _ = cv2.connectedComponentsWithStats(dark_mask, connectivity=8)
+    del dark_mask
+
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    small_ids = np.where(areas <= max_spot_area)[0] + 1
+    del stats, areas
+
+    if small_ids.size == 0:
+        del labels
         return img_rgb
-    # inpaint travaille en BGR mais le résultat est identique canal par canal
-    result_bgr = cv2.inpaint(
-        cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR),
-        spots_mask, inpaintRadius=inpaint_radius, flags=cv2.INPAINT_TELEA,
-    )
+
+    spots_mask = np.isin(labels, small_ids).view(np.uint8) * 255
+    del labels, small_ids
+
+    img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+    result_bgr = cv2.inpaint(img_bgr, spots_mask, inpaintRadius=inpaint_radius, flags=cv2.INPAINT_TELEA)
+    del img_bgr, spots_mask
     return cv2.cvtColor(result_bgr, cv2.COLOR_BGR2RGB)
 
 

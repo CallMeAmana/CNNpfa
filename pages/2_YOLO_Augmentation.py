@@ -482,23 +482,27 @@ def clean_background_spots(img_bgr, bg_thresh=185, max_spot_area=800, inpaint_ra
       4. Inpainting TELEA sur le masque des taches uniquement
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    dark_mask = (gray < bg_thresh).view(np.uint8) * 255
+    del gray
 
-    # Masque binaire des zones sombres
-    dark_mask = np.where(gray < bg_thresh, np.uint8(255), np.uint8(0))
+    _, labels, stats, _ = cv2.connectedComponentsWithStats(dark_mask, connectivity=8)
+    del dark_mask
 
-    # Composantes connexes 8-voisins
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(dark_mask, connectivity=8)
+    # Un seul scan vectorisé au lieu d'un scan par composante
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    small_ids = np.where(areas <= max_spot_area)[0] + 1  # +1 : décalage label (0 = fond)
+    del stats, areas
 
-    # Masque des taches seules (petites composantes)
-    spots_mask = np.zeros(img_bgr.shape[:2], dtype=np.uint8)
-    for i in range(1, num_labels):
-        if stats[i, cv2.CC_STAT_AREA] <= max_spot_area:
-            spots_mask[labels == i] = 255
-
-    if not spots_mask.any():
+    if small_ids.size == 0:
+        del labels
         return img_bgr
 
-    return cv2.inpaint(img_bgr, spots_mask, inpaintRadius=inpaint_radius, flags=cv2.INPAINT_TELEA)
+    spots_mask = np.isin(labels, small_ids).view(np.uint8) * 255
+    del labels, small_ids
+
+    result = cv2.inpaint(img_bgr, spots_mask, inpaintRadius=inpaint_radius, flags=cv2.INPAINT_TELEA)
+    del spots_mask
+    return result
 
 
 def apply_crop(img_bgr, class_labels, bboxes, margin_ratio=0.08, min_margin_px=250, threshold=200):
@@ -733,8 +737,10 @@ if import_mode == "Fichiers multiples":
 
         for img_f in img_files:
             stem = Path(img_f.name).stem
+            img_f.seek(0)
             img_bgr_orig = decode_image_raw(img_f.read())
             if img_bgr_orig is None:
+                sans_label.append(f"{img_f.name} (échec décodage)")
                 continue
 
             if use_disk:
@@ -824,7 +830,7 @@ pairs = []
 crop_stats = []
 
 for rp in raw_pairs:
-    img_bgr = rp["img_bgr_orig"]
+    img_bgr = rp.pop("img_bgr_orig")  # libère la référence dans raw_pairs immédiatement
     class_ids = rp["class_ids"]
     bboxes = rp["bboxes"]
     crop_info = None
@@ -850,7 +856,9 @@ for rp in raw_pairs:
     # (bboxes inchangées : coordonnées YOLO normalisées indépendantes de la résolution
     #  tant que le ratio d'aspect ne change pas)
     img_bgr_resized = resize_keep_ratio_no_pad(img_bgr, output_size)
+    del img_bgr  # libère l'image pleine résolution (potentiellement nettoyée ou croppée)
     img_rgb = cv2.cvtColor(img_bgr_resized, cv2.COLOR_BGR2RGB)
+    del img_bgr_resized
 
     pairs.append({
         "stem":      rp["stem"],
@@ -860,6 +868,7 @@ for rp in raw_pairs:
         "crop_info": crop_info,
     })
 
+raw_pairs.clear()  # toutes les img_bgr_orig déjà libérées via pop() — nettoyage final
 total_annotations = sum(len(p["bboxes"]) for p in pairs)
 st.success(
     f"{len(pairs)} image(s) chargée(s) avec annotation · "

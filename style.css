@@ -748,28 +748,42 @@ button[kind="primary"]:active { transform: translateY(0) !important; }
   border-left-width: 3px !important;
   padding: 0.75rem 1rem !important;
 }
+/* Texte dans les alertes : ne pas hériter du gris global */
+[data-testid="stAlert"] p,
+[data-testid="stAlert"] span,
+[data-testid="stAlert"] div {
+  color: inherit !important;
+}
 .stSuccess,
 [data-testid="stNotificationContentSuccess"] {
-  background: linear-gradient(90deg, rgba(0,229,200,0.06), rgba(0,229,200,0.02)) !important;
-  border: 1px solid var(--teal-border) !important;
+  background: rgba(0,229,200,0.14) !important;
+  border: 1px solid rgba(0,229,200,0.45) !important;
   border-left: 3px solid var(--teal) !important;
-  color: var(--teal) !important;
+  color: #00e5c8 !important;
   border-radius: var(--r-md) !important;
 }
 .stInfo,
 [data-testid="stNotificationContentInfo"] {
-  background: linear-gradient(90deg, var(--blue-10), rgba(59,130,246,0.03)) !important;
-  border: 1px solid var(--blue-border) !important;
+  background: rgba(59,130,246,0.14) !important;
+  border: 1px solid rgba(59,130,246,0.45) !important;
   border-left: 3px solid var(--blue) !important;
-  color: #60a5fa !important;
+  color: #93c5fd !important;
   border-radius: var(--r-md) !important;
 }
 .stWarning,
 [data-testid="stNotificationContentWarning"] {
-  background: linear-gradient(90deg, var(--orange-10), rgba(249,115,22,0.02)) !important;
-  border: 1px solid var(--orange-border) !important;
+  background: rgba(249,115,22,0.14) !important;
+  border: 1px solid rgba(249,115,22,0.45) !important;
   border-left: 3px solid var(--orange) !important;
-  color: var(--orange) !important;
+  color: #fb923c !important;
+  border-radius: var(--r-md) !important;
+}
+.stError,
+[data-testid="stNotificationContentError"] {
+  background: rgba(239,68,68,0.14) !important;
+  border: 1px solid rgba(239,68,68,0.45) !important;
+  border-left: 3px solid #ef4444 !important;
+  color: #fca5a5 !important;
   border-radius: var(--r-md) !important;
 }
 
