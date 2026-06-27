@@ -1,4 +1,5 @@
 import streamlit as st
+from utils import render_theme_toggle
 import albumentations as A
 import cv2
 import numpy as np
@@ -11,19 +12,19 @@ from pathlib import Path
 from itertools import product as itertools_product
 
 
-def load_css(file_name):
-    with open(file_name, encoding="utf-8") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-load_css("style.css")
-
-
 st.set_page_config(
     page_title="Data Augmentation — Câblage industriel",
     page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
+def load_css(file_name):
+    with open(file_name, encoding="utf-8") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+load_css("style.css")
 
 # --- Badge
 
@@ -77,7 +78,7 @@ st.sidebar.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
+render_theme_toggle()
 
 st.sidebar.markdown("""
 <div style="display:flex;align-items:center;gap:8px;margin:1.2rem 0 0.6rem;padding:0 2px;">

@@ -1,4 +1,5 @@
 import streamlit as st
+from utils import render_theme_toggle
 import albumentations as A
 import cv2
 import numpy as np
@@ -21,6 +22,8 @@ try:
     load_css("style.css")
 except FileNotFoundError:
     pass
+
+render_theme_toggle()
 
 # ── CSS personnalisé ──────────────────────────────────────────────────────────
 st.markdown("""
@@ -87,6 +90,9 @@ TECHNIQUES = {
         {"id": "grid",        "nom": "Grid Distortion",    "desc": "Distorsion en grille",       "icon": "▦"},
         {"id": "jpeg",        "nom": "Compression JPEG",   "desc": "Simule la compression",      "icon": "📷"},
     ],
+    "Prétraitement fond": [
+        {"id": "clean_bg",    "nom": "Nettoyage fond",     "desc": "Efface les taches sombres sur fond clair (inpainting)", "icon": "🧹"},
+    ],
 }
 
 BORDER_MODES = {
@@ -94,6 +100,26 @@ BORDER_MODES = {
     "constant": cv2.BORDER_CONSTANT,
     "replicate": cv2.BORDER_REPLICATE,
 }
+
+
+def clean_background_spots(img_rgb: np.ndarray, bg_thresh=185, max_spot_area=800, inpaint_radius=7) -> np.ndarray:
+    """Supprime les petites taches sombres sur fond clair (inpainting TELEA)."""
+    gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+    dark_mask = np.where(gray < bg_thresh, np.uint8(255), np.uint8(0))
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(dark_mask, connectivity=8)
+    spots_mask = np.zeros(img_rgb.shape[:2], dtype=np.uint8)
+    for i in range(1, num_labels):
+        if stats[i, cv2.CC_STAT_AREA] <= max_spot_area:
+            spots_mask[labels == i] = 255
+    if not spots_mask.any():
+        return img_rgb
+    # inpaint travaille en BGR mais le résultat est identique canal par canal
+    result_bgr = cv2.inpaint(
+        cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR),
+        spots_mask, inpaintRadius=inpaint_radius, flags=cv2.INPAINT_TELEA,
+    )
+    return cv2.cvtColor(result_bgr, cv2.COLOR_BGR2RGB)
+
 
 # ── Fonction d'application des effets ─────────────────────────────────────────
 def appliquer_effets(img: np.ndarray, actifs: set, params: dict) -> np.ndarray:
@@ -185,6 +211,14 @@ def appliquer_effets(img: np.ndarray, actifs: set, params: dict) -> np.ndarray:
     if "jpeg" in actifs:
         q = params.get("jpeg_quality", 60)
         out = A.ImageCompression(quality_lower=q, quality_upper=q, p=1.0)(image=out)["image"]
+
+    if "clean_bg" in actifs:
+        out = clean_background_spots(
+            out,
+            bg_thresh=params.get("clean_bg_thresh", 185),
+            max_spot_area=params.get("clean_bg_area", 800),
+            inpaint_radius=params.get("clean_bg_r", 7),
+        )
 
     return out
 
@@ -372,6 +406,13 @@ with st.container():
             if "jpeg" in actifs:
                 with pcols[ci % 2]:
                     params["jpeg_quality"] = st.slider("📷 Qualité JPEG", 10, 95, 60, 5)
+                ci += 1
+
+            if "clean_bg" in actifs:
+                with pcols[ci % 2]:
+                    params["clean_bg_thresh"] = st.slider("🧹 Seuil fond (luminosité)", 150, 240, 185, 5)
+                    params["clean_bg_area"]   = st.slider("🧹 Surface max tache (px²)", 50, 5000, 800, 50)
+                    params["clean_bg_r"]      = st.slider("🧹 Rayon inpainting (px)", 2, 20, 7, 1)
                 ci += 1
 
             st.divider()

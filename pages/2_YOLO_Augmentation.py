@@ -1,4 +1,5 @@
 import streamlit as st
+from utils import render_theme_toggle
 import albumentations as A
 import cv2
 import numpy as np
@@ -9,7 +10,8 @@ from PIL import Image
 from pathlib import Path
 
 st.set_page_config(
-    page_title="YOLO Augmentation",
+    page_title="Data Augmentation — Câblage industriel",
+    page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -23,13 +25,13 @@ try:
 except FileNotFoundError:
     pass
 
-st.title("Systeme d'Augmentation YOLO")
+st.title("Systeme d'Augmentation des images annotées")
 st.markdown("""
 <p style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;color:#4a5568;
     margin-top:-0.3rem;margin-bottom:1.5rem;">
     Upload images + annotations .txt Roboflow &mdash; correspondance automatique par nom.&nbsp;&nbsp;
     <span style="color:rgba(249,115,22,0.4);">|</span>&nbsp;&nbsp;
-    <span style="color:rgba(249,115,22,0.75);">Augmentation aléatoire — bbox préservées</span>
+    <span style="color:rgba(249,115,22,0.75);">Crop optionnel + augmentation aléatoire — bbox préservées</span>
 </p>
 """, unsafe_allow_html=True)
 st.divider()
@@ -74,12 +76,52 @@ st.sidebar.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+render_theme_toggle()
+
+# ════════════════════════════════════════════════
+# SIDEBAR — F-1 CROP AUTOMATIQUE
+# ════════════════════════════════════════════════
+_sidebar_family("F-1 &mdash; Crop automatique")
+
+use_crop = st.sidebar.checkbox("Activer le crop automatique", value=True,
+                                help="Élimine le fond blanc inutile avant augmentation, basé sur les annotations")
+crop_margin_pct = st.sidebar.slider("Marge (%)", 0.02, 0.20, 0.08, 0.01, disabled=not use_crop)
+crop_min_margin_px = st.sidebar.slider("Marge minimale (px)", 50, 400, 250, 10, disabled=not use_crop,
+                                       help="Couvre les pièces non annotées (ex: pattes de bracket)")
+crop_threshold = st.sidebar.slider("Seuil fond blanc", 150, 240, 200, 5, disabled=not use_crop)
+
+# ════════════════════════════════════════════════
+# SIDEBAR — F-2 NETTOYAGE FOND
+# ════════════════════════════════════════════════
+_sidebar_family("F-2 &mdash; Nettoyage fond")
+
+use_clean = st.sidebar.checkbox(
+    "Supprimer taches de fond", value=False,
+    help="Détecte les petites taches sombres sur fond clair et les efface par inpainting"
+)
+clean_bg_thresh  = st.sidebar.slider(
+    "Seuil luminosité fond", 150, 240, 185, 5,
+    disabled=not use_clean,
+    help="Pixels en dessous de ce seuil sont considérés comme sombres"
+)
+clean_spot_area  = st.sidebar.slider(
+    "Surface max tache (px²)", 50, 5000, 800, 50,
+    disabled=not use_clean,
+    help="Composantes sombres plus petites que cette valeur → effacées"
+)
+clean_inpaint_r  = st.sidebar.slider(
+    "Rayon inpainting (px)", 2, 20, 7, 1,
+    disabled=not use_clean,
+    help="Rayon de reconstruction autour de chaque tache effacée"
+)
+
 # ════════════════════════════════════════════════
 # SIDEBAR — F0 GÉNÉRAL
 # ════════════════════════════════════════════════
 _sidebar_family("F0 &mdash; Général")
 n_copies    = st.sidebar.slider("Copies à générer par image", 1, 50, 10)
-output_size = st.sidebar.selectbox("Résolution de sortie", [224, 512, 768, 1024], index=1)
+output_size = st.sidebar.selectbox("Dimension max de sortie (px)", [512, 768, 1024, 1536, 2048], index=2)
+st.sidebar.caption("Ratio d'aspect natif préservé après crop — aucune déformation, aucun padding ajouté")
 
 # ════════════════════════════════════════════════
 # SIDEBAR — F1 GÉOMÉTRIQUE
@@ -250,7 +292,7 @@ else:
 st.divider()
 
 # ════════════════════════════════════════════════
-# FONCTIONS UTILITAIRES
+# FONCTIONS UTILITAIRES — PARSING & FORMATAGE
 # ════════════════════════════════════════════════
 def parse_labels(txt_content: str):
     labels = []
@@ -301,13 +343,189 @@ def draw_bboxes(image_rgb, class_labels, bboxes, color=(0, 255, 100)):
     return img
 
 
-def decode_image(raw_bytes: bytes):
+def decode_image_raw(raw_bytes: bytes):
+    """Décode l'image SANS resize — nécessaire pour le crop (qui a besoin
+    de la résolution originale pour bien calibrer la marge en pixels)."""
     arr = np.frombuffer(raw_bytes, np.uint8)
-    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    if img is None:
+    img_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    return img_bgr
+
+
+# ════════════════════════════════════════════════
+# RESIZE PROPORTIONNEL SANS PADDING — garde le ratio natif, zéro pixel artificiel
+# ════════════════════════════════════════════════
+def resize_keep_ratio_no_pad(img_bgr, max_dimension):
+    """
+    Redimensionne en conservant EXACTEMENT le ratio d'aspect de l'image
+    après crop, sans jamais forcer un format carré et sans ajouter de
+    padding. Limite seulement la plus grande dimension à max_dimension
+    pour éviter des fichiers trop lourds.
+
+    Avantage : les coordonnées YOLO normalisées (0-1) restent valides
+    sans aucun recalcul, car le ratio d'aspect ne change pas.
+    """
+    h, w = img_bgr.shape[:2]
+    scale = min(max_dimension / w, max_dimension / h, 1.0)
+    if scale >= 1.0:
+        return img_bgr.copy()
+
+    new_w, new_h = max(1, int(round(w * scale))), max(1, int(round(h * scale)))
+    return cv2.resize(img_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+
+# ════════════════════════════════════════════════
+# CROP AUTOMATIQUE — validé sur dataset réel (méthode calibrée)
+# ════════════════════════════════════════════════
+def get_threshold_bbox(img_gray, threshold=200):
+    """Méthode seuillage fond blanc — filet de sécurité si pas d'annotation."""
+    mask = img_gray < threshold
+    coords = np.argwhere(mask)
+    if coords.size == 0:
+        h, w = img_gray.shape
+        return 0, 0, w, h
+    y_min, x_min = coords.min(axis=0)
+    y_max, x_max = coords.max(axis=0)
+    return int(x_min), int(y_min), int(x_max), int(y_max)
+
+
+def get_annotations_bbox(bboxes, img_w, img_h):
+    """Bbox englobante de toutes les annotations YOLO (en pixels absolus)."""
+    if not bboxes:
         return None
-    img = cv2.resize(img, (output_size, output_size))
-    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    x_mins, y_mins, x_maxs, y_maxs = [], [], [], []
+    for box in bboxes:
+        cx, cy, w, h = box
+        x_mins.append((cx - w / 2) * img_w)
+        x_maxs.append((cx + w / 2) * img_w)
+        y_mins.append((cy - h / 2) * img_h)
+        y_maxs.append((cy + h / 2) * img_h)
+    return int(min(x_mins)), int(min(y_mins)), int(max(x_maxs)), int(max(y_maxs))
+
+
+def union_bbox(bbox_thresh, bbox_annot, img_w, img_h, max_area_ratio=0.7):
+    """
+    Le seuillage fond blanc est peu fiable sur table industrielle
+    (rayures, taches) -> peut couvrir ~100% de l'image.
+    On priorise donc la bbox des annotations, et on ignore le seuillage
+    s'il est aberrant (couvre plus de max_area_ratio de l'image).
+    """
+    img_area = img_w * img_h
+    thresh_area = (bbox_thresh[2] - bbox_thresh[0]) * (bbox_thresh[3] - bbox_thresh[1])
+    thresh_ratio = thresh_area / img_area
+
+    if bbox_annot is None:
+        return bbox_thresh
+    if thresh_ratio > max_area_ratio:
+        return bbox_annot
+
+    return (
+        min(bbox_thresh[0], bbox_annot[0]),
+        min(bbox_thresh[1], bbox_annot[1]),
+        max(bbox_thresh[2], bbox_annot[2]),
+        max(bbox_thresh[3], bbox_annot[3]),
+    )
+
+
+def add_margin(bbox, img_w, img_h, margin_ratio=0.08, min_margin_px=250):
+    """
+    Marge = max(pourcentage, minimum absolu en pixels).
+    Évite de couper les pièces non annotées (ex: pattes de bracket)
+    quand la bbox d'annotations est étroite.
+    """
+    x_min, y_min, x_max, y_max = bbox
+    mw = max(int((x_max - x_min) * margin_ratio), min_margin_px)
+    mh = max(int((y_max - y_min) * margin_ratio), min_margin_px)
+    return (
+        max(0, x_min - mw),
+        max(0, y_min - mh),
+        min(img_w, x_max + mw),
+        min(img_h, y_max + mh),
+    )
+
+
+def recompute_labels_after_crop(class_labels, bboxes, crop_bbox, img_w, img_h):
+    """Recalcule les coordonnées YOLO normalisées après crop."""
+    cx0, cy0, cx1, cy1 = crop_bbox
+    crop_w, crop_h = cx1 - cx0, cy1 - cy0
+
+    new_class_labels, new_bboxes = [], []
+    for cls, box in zip(class_labels, bboxes):
+        cx, cy, w, h = box
+        abs_cx, abs_cy = cx * img_w, cy * img_h
+        abs_w, abs_h = w * img_w, h * img_h
+
+        new_abs_cx = abs_cx - cx0
+        new_abs_cy = abs_cy - cy0
+
+        new_cx = new_abs_cx / crop_w
+        new_cy = new_abs_cy / crop_h
+        new_w = abs_w / crop_w
+        new_h = abs_h / crop_h
+
+        if 0 <= new_cx <= 1 and 0 <= new_cy <= 1:
+            new_class_labels.append(cls)
+            new_bboxes.append([new_cx, new_cy, min(new_w, 1.0), min(new_h, 1.0)])
+
+    return new_class_labels, new_bboxes
+
+
+def clean_background_spots(img_bgr, bg_thresh=185, max_spot_area=800, inpaint_radius=7):
+    """
+    Supprime les petites taches sombres sur fond clair.
+
+    Principe :
+      1. Seuillage → masque de toutes les zones sombres (taches + objet principal)
+      2. Composantes connexes → filtrage par aire
+      3. Seules les petites composantes (< max_spot_area px²) sont considérées
+         comme des taches ; les grandes (pièce réelle) sont préservées
+      4. Inpainting TELEA sur le masque des taches uniquement
+    """
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+
+    # Masque binaire des zones sombres
+    dark_mask = np.where(gray < bg_thresh, np.uint8(255), np.uint8(0))
+
+    # Composantes connexes 8-voisins
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(dark_mask, connectivity=8)
+
+    # Masque des taches seules (petites composantes)
+    spots_mask = np.zeros(img_bgr.shape[:2], dtype=np.uint8)
+    for i in range(1, num_labels):
+        if stats[i, cv2.CC_STAT_AREA] <= max_spot_area:
+            spots_mask[labels == i] = 255
+
+    if not spots_mask.any():
+        return img_bgr
+
+    return cv2.inpaint(img_bgr, spots_mask, inpaintRadius=inpaint_radius, flags=cv2.INPAINT_TELEA)
+
+
+def apply_crop(img_bgr, class_labels, bboxes, margin_ratio=0.08, min_margin_px=250, threshold=200):
+    """
+    Pipeline de crop complet : seuillage + bbox annotations + marge calibrée.
+    Opère sur l'image en résolution ORIGINALE (avant resize).
+    Retourne (image_croppée_bgr, nouvelles_class_labels, nouvelles_bboxes, info_dict).
+    """
+    h, w = img_bgr.shape[:2]
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+
+    bbox_thresh = get_threshold_bbox(gray, threshold)
+    bbox_annot = get_annotations_bbox(bboxes, w, h)
+    final_bbox = union_bbox(bbox_thresh, bbox_annot, w, h)
+    final_bbox = add_margin(final_bbox, w, h, margin_ratio, min_margin_px)
+
+    x0, y0, x1, y1 = final_bbox
+    if x1 <= x0 or y1 <= y0:
+        return img_bgr, class_labels, bboxes, {"ok": False, "reduction": 0.0}
+
+    cropped = img_bgr[y0:y1, x0:x1]
+    new_class_labels, new_bboxes = recompute_labels_after_crop(
+        class_labels, bboxes, final_bbox, w, h)
+
+    reduction = 100 * (1 - (cropped.shape[0] * cropped.shape[1]) / (h * w))
+    info = {"ok": True, "reduction": reduction,
+            "labels_kept": len(new_bboxes), "labels_total": len(bboxes)}
+    return cropped, new_class_labels, new_bboxes, info
 
 
 def build_augmentor():
@@ -428,14 +646,15 @@ import_mode = st.radio(
     label_visibility="collapsed"
 )
 
-pairs      = []
+raw_pairs  = []   # avant crop, résolution originale : {"stem", "img_bgr_orig", "class_ids", "bboxes"}
 sans_label = []
 
 # ─────────────────────────────────────────────
 # MODE 1 — FICHIERS MULTIPLES
 # ─────────────────────────────────────────────
 if import_mode == "Fichiers multiples":
-    col_img, col_txt = st.columns(2)
+    col_img, col_lbl = st.columns(2)
+
     with col_img:
         img_files = st.file_uploader(
             "Images (.jpg / .png)",
@@ -443,34 +662,99 @@ if import_mode == "Fichiers multiples":
             accept_multiple_files=True,
             key="imgs_multi"
         )
-    with col_txt:
-        txt_files = st.file_uploader(
-            "Annotations (.txt) — même nom que les images",
-            type=["txt"],
-            accept_multiple_files=True,
-            key="txts_multi"
+
+    with col_lbl:
+        st.markdown(
+            "<div style='font-size:0.72rem;font-weight:600;margin-bottom:0.4rem;'>"
+            "Source des labels</div>",
+            unsafe_allow_html=True,
+        )
+        label_src = st.radio(
+            "label_src",
+            ["Dossier local", "Fichiers individuels"],
+            horizontal=False,
+            label_visibility="collapsed",
+            key="label_source_mode",
         )
 
+        # ── Dossier local ──
+        if label_src == "Dossier local":
+            folder_path_str = st.text_input(
+                "Chemin du dossier de labels",
+                placeholder="ex : C:\\dataset\\labels",
+                key="label_folder_path",
+                label_visibility="collapsed",
+            )
+            txt_files = None  # non utilisé dans ce mode
+
+            # Feedback en temps réel
+            if folder_path_str:
+                folder_path = Path(folder_path_str.strip())
+                if not folder_path.exists():
+                    st.error("Dossier introuvable.")
+                elif not folder_path.is_dir():
+                    st.error("Ce chemin n'est pas un dossier.")
+                else:
+                    found_txts = list(folder_path.glob("*.txt"))
+                    st.success(
+                        f"{len(found_txts)} fichier(s) .txt trouvé(s)"
+                        + (
+                            f" — {sum(1 for t in found_txts if t.stem in {Path(f.name).stem for f in (img_files or [])})}"
+                            f" correspondance(s) avec les images"
+                            if img_files else ""
+                        )
+                    )
+            else:
+                folder_path = None
+        # ── Fichiers individuels ──
+        else:
+            folder_path = None
+            txt_files = st.file_uploader(
+                "Annotations (.txt) — même nom que les images",
+                type=["txt"],
+                accept_multiple_files=True,
+                key="txts_multi",
+                label_visibility="collapsed",
+            )
+
+    # ── Construction du txt_map et des paires ──
     if img_files:
-        txt_map = {Path(f.name).stem: f for f in (txt_files or [])}
+        # Priorité : dossier local → fichiers uploadés
+        use_disk = label_src == "Dossier local" and folder_path and folder_path.is_dir()
+
+        if use_disk:
+            txt_map_disk = {p.stem: p for p in folder_path.glob("*.txt")}
+        else:
+            txt_map_disk = {}
+
+        txt_map_upload = {Path(f.name).stem: f for f in (txt_files or [])}
+
         for img_f in img_files:
-            stem    = Path(img_f.name).stem
-            img_rgb = decode_image(img_f.read())
-            if img_rgb is None:
+            stem = Path(img_f.name).stem
+            img_bgr_orig = decode_image_raw(img_f.read())
+            if img_bgr_orig is None:
                 continue
-            if stem not in txt_map:
-                sans_label.append(img_f.name)
-                continue
-            txt_map[stem].seek(0)
-            labels = parse_labels(txt_map[stem].read().decode("utf-8"))
+
+            if use_disk:
+                if stem not in txt_map_disk:
+                    sans_label.append(img_f.name)
+                    continue
+                labels = parse_labels(txt_map_disk[stem].read_text(encoding="utf-8"))
+            else:
+                if stem not in txt_map_upload:
+                    sans_label.append(img_f.name)
+                    continue
+                txt_map_upload[stem].seek(0)
+                labels = parse_labels(txt_map_upload[stem].read().decode("utf-8"))
+
             if not labels:
                 sans_label.append(img_f.name)
                 continue
-            pairs.append({
-                "stem":      stem,
-                "img_rgb":   img_rgb,
-                "class_ids": [l[0] for l in labels],
-                "bboxes":    [[l[1], l[2], l[3], l[4]] for l in labels],
+            raw_pairs.append({
+                "stem":         stem,
+                "img_bgr_orig": img_bgr_orig,
+                "class_ids":    [l[0] for l in labels],
+                "bboxes":       [[l[1], l[2], l[3], l[4]] for l in labels],
             })
 
 # ─────────────────────────────────────────────
@@ -497,9 +781,9 @@ else:
                 and Path(n).suffix.lower() == ".txt"
             }
             for img_name in img_entries:
-                stem    = Path(img_name).stem
-                img_rgb = decode_image(zf.read(img_name))
-                if img_rgb is None:
+                stem = Path(img_name).stem
+                img_bgr_orig = decode_image_raw(zf.read(img_name))
+                if img_bgr_orig is None:
                     continue
                 if stem not in txt_map:
                     sans_label.append(Path(img_name).name)
@@ -508,11 +792,11 @@ else:
                 if not labels:
                     sans_label.append(Path(img_name).name)
                     continue
-                pairs.append({
-                    "stem":      stem,
-                    "img_rgb":   img_rgb,
-                    "class_ids": [l[0] for l in labels],
-                    "bboxes":    [[l[1], l[2], l[3], l[4]] for l in labels],
+                raw_pairs.append({
+                    "stem":         stem,
+                    "img_bgr_orig": img_bgr_orig,
+                    "class_ids":    [l[0] for l in labels],
+                    "bboxes":       [[l[1], l[2], l[3], l[4]] for l in labels],
                 })
 
 # ════════════════════════════════════════════════
@@ -524,18 +808,80 @@ if sans_label:
         f"{', '.join(sans_label[:5])}{'…' if len(sans_label) > 5 else ''}"
     )
 
-if not pairs:
+if not raw_pairs:
     st.info(
         "Chargez des images et leurs annotations. "
         "Le fichier .txt doit avoir **exactement le même nom** que l'image (extension différente)."
     )
     st.stop()
 
+# ════════════════════════════════════════════════
+# APPLICATION DU CROP (si activé) puis LETTERBOX RESIZE
+# ════════════════════════════════════════════════
+pairs = []
+crop_stats = []
+
+for rp in raw_pairs:
+    img_bgr = rp["img_bgr_orig"]
+    class_ids = rp["class_ids"]
+    bboxes = rp["bboxes"]
+    crop_info = None
+
+    if use_clean:
+        img_bgr = clean_background_spots(
+            img_bgr,
+            bg_thresh=clean_bg_thresh,
+            max_spot_area=clean_spot_area,
+            inpaint_radius=clean_inpaint_r,
+        )
+
+    if use_crop:
+        img_bgr, class_ids, bboxes, crop_info = apply_crop(
+            img_bgr, class_ids, bboxes,
+            margin_ratio=crop_margin_pct,
+            min_margin_px=crop_min_margin_px,
+            threshold=crop_threshold,
+        )
+        crop_stats.append(crop_info)
+
+    # Resize proportionnel APRÈS le crop — garde le ratio natif, zéro padding
+    # (bboxes inchangées : coordonnées YOLO normalisées indépendantes de la résolution
+    #  tant que le ratio d'aspect ne change pas)
+    img_bgr_resized = resize_keep_ratio_no_pad(img_bgr, output_size)
+    img_rgb = cv2.cvtColor(img_bgr_resized, cv2.COLOR_BGR2RGB)
+
+    pairs.append({
+        "stem":      rp["stem"],
+        "img_rgb":   img_rgb,
+        "class_ids": class_ids,
+        "bboxes":    bboxes,
+        "crop_info": crop_info,
+    })
+
 total_annotations = sum(len(p["bboxes"]) for p in pairs)
 st.success(
     f"{len(pairs)} image(s) chargée(s) avec annotation · "
-    f"{total_annotations} bbox(es) au total · résolution {output_size}×{output_size}px"
+    f"{total_annotations} bbox(es) au total · dimension max {output_size}px (ratio natif préservé)"
 )
+
+if use_crop and crop_stats:
+    reductions = [c["reduction"] for c in crop_stats if c["ok"]]
+    n_failed_crop = sum(1 for c in crop_stats if not c["ok"])
+    if reductions:
+        st.info(
+            f"Crop appliqué sur {len(reductions)} image(s) — "
+            f"réduction moyenne de surface : {np.mean(reductions):.1f}% "
+            f"(min {min(reductions):.1f}% / max {max(reductions):.1f}%)"
+        )
+    if n_failed_crop:
+        st.warning(f"{n_failed_crop} image(s) n'ont pas pu être croppées — augmentation lancée sur l'original.")
+    low_reduction = [c for c in crop_stats if c["ok"] and c["reduction"] < 15]
+    if low_reduction:
+        st.warning(
+            f"⚠ {len(low_reduction)} image(s) avec réduction < 15% — "
+            "vérifie si les annotations correspondent bien à l'image (ou ajuste la marge)."
+        )
+
 expected_per_image = n_copies * x
 st.info(
     f"Total images à générer : {len(pairs)} images × {n_copies} copies × {x} (facteur) "
@@ -546,25 +892,7 @@ st.info(
 if (use_mixup or use_cutmix) and len(pairs) < 2:
     st.warning("Mixup / CutMix nécessitent au moins 2 images chargées pour mélanger.")
 
-# ── Aperçu grille (8 premières images)
-st.divider()
-st.subheader("Aperçu — images chargées avec bounding boxes")
-n_prev    = min(len(pairs), 8)
-cols_prev = st.columns(min(n_prev, 4))
-for i in range(n_prev):
-    p   = pairs[i]
-    vis = draw_bboxes(p["img_rgb"], p["class_ids"], p["bboxes"])
-    cols_prev[i % 4].image(
-        vis,
-        caption=f"{p['stem']} · {len(p['bboxes'])} bbox",
-        use_container_width=True
-    )
-if len(pairs) > 8:
-    st.caption(f"… et {len(pairs) - 8} autre(s) image(s) non affichée(s)")
-
-# ── Toutes les images chargées (scrollable)
 def _encode_img_to_data_uri(img_rgb):
-    from io import BytesIO
     import base64
     is_success, buf = cv2.imencode('.jpg', cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR))
     if not is_success:
@@ -572,6 +900,32 @@ def _encode_img_to_data_uri(img_rgb):
     b64 = base64.b64encode(buf.tobytes()).decode('ascii')
     return f"data:image/jpeg;base64,{b64}"
 
+# ── Aperçu grille — montre le résultat APRÈS crop + letterbox
+st.divider()
+st.subheader("Aperçu — images chargées avec bounding boxes" + (" (après crop)" if use_crop else ""))
+
+prev_items = []
+for p in pairs:
+    vis = draw_bboxes(p["img_rgb"], p["class_ids"], p["bboxes"])
+    caption = f"{p['stem']} · {len(p['bboxes'])} bbox"
+    if p["crop_info"] and p["crop_info"]["ok"]:
+        caption += f" · -{p['crop_info']['reduction']:.0f}%"
+    uri = _encode_img_to_data_uri(vis)
+    if uri:
+        prev_items.append(
+            f"<div style='display:flex;flex-direction:column;align-items:center;margin:6px;'>"
+            f"<img src='{uri}' style='width:180px;height:auto;border-radius:6px;object-fit:cover;'/>"
+            f"<div style='font-size:0.75rem;margin-top:4px;color:#334455'>{caption}</div></div>"
+        )
+
+prev_html = (
+    "<div style='max-height:420px;overflow:auto;display:flex;flex-wrap:wrap;"
+    "gap:8px;padding:6px;border:1px solid rgba(0,0,0,0.04);'>"
+    + "".join(prev_items) + "</div>"
+)
+st.markdown(prev_html, unsafe_allow_html=True)
+
+# ── Toutes les images chargées (scrollable)
 st.markdown("**Toutes les images chargées**")
 imgs_html = [f"<div style='display:flex;flex-direction:column;align-items:center;margin:6px;'>"
              f"<img src='{_encode_img_to_data_uri(draw_bboxes(p['img_rgb'], p['class_ids'], p['bboxes']))}' "
@@ -596,7 +950,7 @@ if st.button("Lancer l'augmentation", type="primary", use_container_width=True):
     total_failed    = 0
     preview_imgs    = []
 
-    # pré-extraction des images pour Mixup/CutMix
+    # pré-extraction des images (déjà croppées/letterboxées) pour Mixup/CutMix
     all_imgs_rgb = [p["img_rgb"] for p in pairs]
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -608,7 +962,7 @@ if st.button("Lancer l'augmentation", type="primary", use_container_width=True):
             class_ids = pair["class_ids"]
             bboxes    = pair["bboxes"]
 
-            # écriture de l'original
+            # écriture de l'original (déjà croppé/letterboxé si activé)
             img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
             _, orig_enc = cv2.imencode(".jpg", img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
             zf.writestr(f"{stem}_orig.jpg", orig_enc.tobytes())
