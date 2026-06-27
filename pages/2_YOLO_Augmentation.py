@@ -682,6 +682,7 @@ if import_mode == "Fichiers multiples":
         if label_src == "Dossier local":
             folder_path_str = st.text_input(
                 "Chemin du dossier de labels",
+                value=r"C:\Users\HP\Downloads\vision_project.yolov8 (1)\train - Copie\labels",
                 placeholder="ex : C:\\dataset\\labels",
                 key="label_folder_path",
                 label_visibility="collapsed",
