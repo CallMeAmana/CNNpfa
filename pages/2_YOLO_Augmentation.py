@@ -131,7 +131,7 @@ clean_inpaint_r  = st.sidebar.slider(
 _sidebar_family("F0 &mdash; Général")
 n_copies    = st.sidebar.slider("Copies à générer par image", 1, 50, 3,
                                  help="OK -> 2 | pclipAbsent -> 3 | ticketManquant -> 6")
-output_size = st.sidebar.selectbox("Dimension max de sortie (px)", [512, 768, 1024, 1536, 2048], index=2)
+output_size = st.sidebar.selectbox("Dimension max de sortie (px)", [512, 640, 768, 1024, 1536, 2048], index=1)
 st.sidebar.caption("Ratio d'aspect natif préservé après crop — aucune déformation, aucun padding ajouté")
 
 # ════════════════════════════════════════════════
