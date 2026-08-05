@@ -6,7 +6,7 @@ import numpy as np
 import zipfile
 import io
 import os
-from PIL import Image
+from PIL import Image, ImageOps
 from pathlib import Path
 
 st.set_page_config(
@@ -77,6 +77,16 @@ st.sidebar.markdown("""
 """, unsafe_allow_html=True)
 
 render_theme_toggle()
+
+# ════════════════════════════════════════════════
+# SIDEBAR — F-2 PRÉTRAITEMENT (à la Roboflow)
+# ════════════════════════════════════════════════
+_sidebar_family("Prétraitement")
+
+use_auto_orient = st.sidebar.checkbox(
+    "Auto-Orient (EXIF)", value=True,
+    help="Applique la rotation EXIF de l'image puis supprime la métadonnée — évite les images pivotées à l'affichage"
+)
 
 # ════════════════════════════════════════════════
 # SIDEBAR — F-1 CROP AUTOMATIQUE
@@ -170,6 +180,12 @@ brightness_max   = st.sidebar.slider("Luminosité max", 0.1, 0.5, 0.25, 0.05, di
 brightness_pas   = st.sidebar.number_input("Nombre de pas — Luminosité", 1, 10, 1, disabled=not use_brightness)
 st.sidebar.markdown("---")
 
+use_exposure     = st.sidebar.checkbox("Exposition (Exposure)", value=True,
+                                        help="Variation d'exposition type Roboflow — distincte de la luminosité, via correction gamma")
+exposure_max     = st.sidebar.slider("Exposition max (%)", 5, 50, 21, 1, disabled=not use_exposure)
+exposure_pas     = st.sidebar.number_input("Nombre de pas — Exposition", 1, 10, 1, disabled=not use_exposure)
+st.sidebar.markdown("---")
+
 use_noise    = st.sidebar.checkbox("Bruit gaussien", value=False)
 noise_max    = st.sidebar.slider("Variance bruit max", 10, 100, 20, 5, disabled=not use_noise)
 noise_pas    = st.sidebar.number_input("Nombre de pas — Bruit", 1, 10, 1, disabled=not use_noise)
@@ -247,6 +263,7 @@ if use_perspective: techniques_actives.append({"nom": "Perspective", "nb_pas": i
 if use_shear:       techniques_actives.append({"nom": "Cisaillement", "nb_pas": int(shear_pas)})
 if use_shift:       techniques_actives.append({"nom": "Translation", "nb_pas": int(shift_pas)})
 if use_brightness:  techniques_actives.append({"nom": "Luminosité / Contraste", "nb_pas": int(brightness_pas)})
+if use_exposure:    techniques_actives.append({"nom": "Exposition", "nb_pas": int(exposure_pas)})
 if use_noise:       techniques_actives.append({"nom": "Bruit gaussien", "nb_pas": int(noise_pas)})
 if use_blur:        techniques_actives.append({"nom": "Flou gaussien", "nb_pas": int(blur_pas)})
 if use_motion_blur: techniques_actives.append({"nom": "Flou mouvement", "nb_pas": int(motion_pas)})
@@ -344,9 +361,20 @@ def draw_bboxes(image_rgb, class_labels, bboxes, color=(0, 255, 100)):
     return img
 
 
-def decode_image_raw(raw_bytes: bytes):
+def decode_image_raw(raw_bytes: bytes, auto_orient: bool = True):
     """Décode l'image SANS resize — nécessaire pour le crop (qui a besoin
-    de la résolution originale pour bien calibrer la marge en pixels)."""
+    de la résolution originale pour bien calibrer la marge en pixels).
+
+    Si auto_orient est activé, applique la rotation/flip indiqués par le tag
+    EXIF Orientation (comme Roboflow) puis supprime le tag — cv2.imdecode
+    seul ignore l'EXIF et laisse l'image dans son orientation brute capteur.
+    """
+    if auto_orient:
+        try:
+            pil_img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw_bytes)))
+            return cv2.cvtColor(np.array(pil_img.convert("RGB")), cv2.COLOR_RGB2BGR)
+        except Exception:
+            pass
     arr = np.frombuffer(raw_bytes, np.uint8)
     img_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     return img_bgr
@@ -563,6 +591,10 @@ def build_augmentor():
         transforms.append(A.RandomBrightnessContrast(
             brightness_limit=brightness_max, contrast_limit=brightness_max, p=0.8
         ))
+    if use_exposure:
+        gamma_low  = max(1, 100 - exposure_max)
+        gamma_high = 100 + exposure_max
+        transforms.append(A.RandomGamma(gamma_limit=(gamma_low, gamma_high), p=0.6))
     if use_noise:
         transforms.append(A.GaussNoise(var_limit=(5, noise_max), p=0.5))
     if use_blur:
@@ -738,7 +770,7 @@ if import_mode == "Fichiers multiples":
         for img_f in img_files:
             stem = Path(img_f.name).stem
             img_f.seek(0)
-            img_bgr_orig = decode_image_raw(img_f.read())
+            img_bgr_orig = decode_image_raw(img_f.read(), auto_orient=use_auto_orient)
             if img_bgr_orig is None:
                 sans_label.append(f"{img_f.name} (échec décodage)")
                 continue
@@ -790,7 +822,7 @@ else:
             }
             for img_name in img_entries:
                 stem = Path(img_name).stem
-                img_bgr_orig = decode_image_raw(zf.read(img_name))
+                img_bgr_orig = decode_image_raw(zf.read(img_name), auto_orient=use_auto_orient)
                 if img_bgr_orig is None:
                     continue
                 if stem not in txt_map:
@@ -821,6 +853,70 @@ if not raw_pairs:
         "Chargez des images et leurs annotations. "
         "Le fichier .txt doit avoir **exactement le même nom** que l'image (extension différente)."
     )
+    st.stop()
+
+# ════════════════════════════════════════════════
+# MODIFY CLASSES — remap / drop (à la Roboflow)
+# ════════════════════════════════════════════════
+st.markdown("""
+<div style="display:flex;align-items:center;gap:12px;margin:0.5rem 0 1rem;">
+    <div style="width:36px;height:36px;background:rgba(139,92,246,0.12);
+        border:1px solid rgba(139,92,246,0.3);border-radius:8px;
+        display:flex;align-items:center;justify-content:center;font-size:1.1rem;">&#9878;</div>
+    <div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:#1a1f2e;">
+            Modify Classes</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;
+            color:#4a5568;letter-spacing:0.12em;text-transform:uppercase;">
+            Remap ou drop des classes avant augmentation</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+detected_classes = sorted({cid for rp in raw_pairs for cid in rp["class_ids"]})
+
+class_action_rows = [
+    {"Classe": cid, "Action": "Keep", "Remap vers (id)": cid}
+    for cid in detected_classes
+]
+class_edit_df = st.data_editor(
+    class_action_rows,
+    column_config={
+        "Classe": st.column_config.NumberColumn(disabled=True),
+        "Action": st.column_config.SelectboxColumn(options=["Keep", "Remap", "Drop"], required=True),
+        "Remap vers (id)": st.column_config.NumberColumn(min_value=0, step=1),
+    },
+    hide_index=True,
+    use_container_width=True,
+    key="modify_classes_editor",
+)
+
+class_map = {}   # old_id -> new_id, absent = drop
+n_dropped_cls, n_remapped_cls = 0, 0
+for row in class_edit_df:
+    cid = row["Classe"]
+    if row["Action"] == "Drop":
+        n_dropped_cls += 1
+        continue
+    new_id = int(row["Remap vers (id)"]) if row["Action"] == "Remap" else cid
+    if new_id != cid:
+        n_remapped_cls += 1
+    class_map[cid] = new_id
+
+st.caption(f"Modify Classes: {n_remapped_cls} remapped, {n_dropped_cls} dropped")
+
+for rp in raw_pairs:
+    new_ids, new_boxes = [], []
+    for cid, box in zip(rp["class_ids"], rp["bboxes"]):
+        if cid not in class_map:
+            continue
+        new_ids.append(class_map[cid])
+        new_boxes.append(box)
+    rp["class_ids"], rp["bboxes"] = new_ids, new_boxes
+
+raw_pairs = [rp for rp in raw_pairs if rp["bboxes"]]
+if not raw_pairs:
+    st.warning("Toutes les annotations ont été supprimées par le mapping de classes — vérifie la configuration.")
     st.stop()
 
 # ════════════════════════════════════════════════
