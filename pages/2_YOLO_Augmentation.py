@@ -596,7 +596,18 @@ def build_augmentor():
         gamma_high = 100 + exposure_max
         transforms.append(A.RandomGamma(gamma_limit=(gamma_low, gamma_high), p=0.6))
     if use_noise:
-        transforms.append(A.GaussNoise(var_limit=(5, noise_max), p=0.5))
+        # `var_limit` a ete supprime en albumentations 2.x : il etait accepte puis
+        # IGNORE (simple UserWarning), et GaussNoise retombait sur son defaut
+        # std_range=(0.2, 0.44) — soit un ecart-type de 51 a 112 sur l'echelle
+        # 0-255, la ou le curseur en demandait 2 a 10. Le bruit reellement
+        # applique etait donc ~25x plus fort que celui affiche, sans aucun signal
+        # visible dans l'interface.
+        #
+        # `std_range` s'exprime en fraction de la valeur max (0-1), le curseur en
+        # VARIANCE sur l'echelle 0-255 : la conversion est sqrt(variance)/255.
+        transforms.append(A.GaussNoise(
+            std_range=(5 ** 0.5 / 255, noise_max ** 0.5 / 255), p=0.5
+        ))
     if use_blur:
         k = blur_max if blur_max % 2 == 1 else blur_max + 1
         transforms.append(A.GaussianBlur(blur_limit=(3, max(3, k)), p=0.3))
